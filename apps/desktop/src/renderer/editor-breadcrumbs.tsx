@@ -17,6 +17,7 @@ import {
 import { openEditorFileExternally } from './editor-external-file';
 import { BreadcrumbPicker, BreadcrumbTrail } from './editor-breadcrumb-parts';
 import { DockOverflowMenu, type DockAction } from './pane-dock-chrome';
+import { EditorViewSwitch, EditorViewTools, type EditorViewControls } from './editor-view-switch';
 import { explorerAbsolutePath } from './explorer-tree-model';
 import { isRemoteHostRenderer } from './remote-ui-projection';
 import { copyTextToClipboard } from './text-format';
@@ -94,6 +95,7 @@ export function EditorBreadcrumbs({
   cursorLine,
   outline,
   menuActions = [],
+  viewControls,
   onSave,
   onRevert,
   onOpenAt,
@@ -112,6 +114,8 @@ export function EditorBreadcrumbs({
   outline: EditorOutlineItem[];
   /** Extra ⋯ entries (Format Document…), after Reveal / Open in default app. */
   menuActions?: readonly DockAction[];
+  /** Preview | Rich | Source switch, outline toggle, side preview. */
+  viewControls?: EditorViewControls;
   onSave(): void;
   onRevert(): void;
   onOpenAt?(relPath: string, line: number): void;
@@ -337,7 +341,7 @@ export function EditorBreadcrumbs({
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
-      if ((event.target as HTMLElement).closest('.editor-breadcrumb-actions')) return;
+      if ((event.target as HTMLElement).closest('.editor-breadcrumb-actions, .editor-view-switch')) return;
       const count = segments.length + symbols.length;
       if (!count) return;
       if (event.key === 'Escape') {
@@ -389,7 +393,9 @@ export function EditorBreadcrumbs({
           onOpenPath={openPath}
           onOpenSymbol={openSymbol}
         />
+        {viewControls?.viewToggle && <EditorViewSwitch toggle={viewControls.viewToggle} />}
         <span className="editor-breadcrumb-actions">
+          {viewControls && <EditorViewTools controls={viewControls} />}
           {editable && dirty && (
             <button
               type="button"

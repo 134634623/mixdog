@@ -145,7 +145,10 @@ export function createSetRoute(deps, persist) {
       if (applyToCurrentSession) persist.applySessionTuning();
       return getRoute();
     }
+    // An addressed runtime keeps its durable id: the empty session is updated
+    // in place, never closed and replaced by a freshly minted one.
     if (
+      !deps.getAddressedSessionId?.() &&
       shouldRecreateEmptySessionForRouteChange(session, applyToCurrentSession) &&
       session?.id &&
       typeof createCurrentSession === 'function'

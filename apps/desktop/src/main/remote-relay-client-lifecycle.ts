@@ -91,6 +91,8 @@ export function createRelayClientLifecycle(deps: RelayClientLifecycleDeps): Rela
           platform: String(envelope.platform || '').slice(0, 80),
           browser,
           desktop: browser === MIXDOG_DESKTOP_CLIENT_BROWSER,
+          method: envelope.method === 'code' ? 'code' : 'qr',
+          requestedAt: Date.now(),
           expiresAt,
         });
         if (decision?.approved) {

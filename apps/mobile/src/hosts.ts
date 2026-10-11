@@ -4,7 +4,7 @@
 // ROUTE (`/d/<deviceId>/`), never a credential; plain http is loopback-only.
 
 const DEVICE_ROUTE = /^\/d\/((?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})|[0-9a-f]{32,64})\/?$/iu;
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+export const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 export const MAX_SAVED_HOSTS = 16;
 
 export interface PairedHost {
@@ -37,19 +37,25 @@ export function parsePairingLink(text: unknown): { url: string; deviceId: string
   return { url: `${url.origin}/d/${deviceId}/`, deviceId };
 }
 
-export function defaultHostName(link: { url: string; deviceId: string }): string {
+function defaultHostName(link: { url: string; deviceId: string }): string {
   return `${new URL(link.url).host} · ${link.deviceId.slice(0, 8)}`;
 }
 
 export const emptyHostBook = (): HostBook => ({ hosts: [], last: '' });
 
-/** Remember (or refresh) a host and make it the launch target. */
-export function rememberHost(book: HostBook, link: { url: string; deviceId: string }, now: number): HostBook {
+/** Remember (or refresh) a host and make it the launch target. `name` is the
+ *  host's own name for itself when it told us (6-digit code). */
+export function rememberHost(
+  book: HostBook,
+  link: { url: string; deviceId: string },
+  now: number,
+  name = ''
+): HostBook {
   const existing = book.hosts.find((host) => host.url === link.url);
   const entry: PairedHost = {
     url: link.url,
     deviceId: link.deviceId,
-    name: existing?.name ?? defaultHostName(link),
+    name: name.trim().slice(0, 80) || existing?.name || defaultHostName(link),
     lastOpenedAt: now,
   };
   const hosts = [entry, ...book.hosts.filter((host) => host.url !== link.url)].slice(0, MAX_SAVED_HOSTS);
@@ -81,6 +87,60 @@ export function readHostBook(raw: string | null | undefined): HostBook {
   } catch {
     return emptyHostBook();
   }
+}
+
+/** Build-time override (scripts/build-web.mjs, MIXDOG_MOBILE_RELAY_ORIGIN) for
+ *  verification builds that pair against a staging relay. */
+declare const __MIXDOG_RELAY_ORIGIN__: string | undefined;
+
+/** The relay every install dials unless told otherwise; where a 6-digit code
+ *  typed on a fresh phone is redeemed. */
+export const DEFAULT_RELAY_ORIGIN =
+  typeof __MIXDOG_RELAY_ORIGIN__ === 'string' && __MIXDOG_RELAY_ORIGIN__
+    ? __MIXDOG_RELAY_ORIGIN__
+    : 'https://192-255-139-161.sslip.io';
+
+/** The six digits in what was typed (`482·917`, `482 917`), or null. */
+export function parseCodeInput(text: unknown): string | null {
+  const digits = String(text ?? '').replace(/[\s·.-]/gu, '');
+  return /^\d{6}$/u.test(digits) ? digits : null;
+}
+
+export type RedeemResult =
+  | { ok: true; link: { url: string; deviceId: string }; name: string; ticket: string }
+  | { ok: false; reason: 'invalid' | 'rate-limited' | 'outdated' | 'network'; retryAfter?: number };
+
+/** Redeems a code at the relay. A right code answers once with the host's
+ *  route and a one-time ticket; the host still has to approve the claim. A relay
+ *  that does not know the endpoint answers without our JSON: "outdated". */
+export async function redeemCode(
+  relayOrigin: string,
+  code: string,
+  doFetch: typeof fetch = fetch
+): Promise<RedeemResult> {
+  let response: Response;
+  try {
+    response = await doFetch(`${relayOrigin}/pair-code/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+  let body: { status?: unknown; deviceId?: unknown; ticket?: unknown; name?: unknown; retryAfter?: unknown } = {};
+  try {
+    body = (await response.json()) as typeof body;
+  } catch {
+    /* not our JSON */
+  }
+  if (response.status === 200 && typeof body.deviceId === 'string' && typeof body.ticket === 'string') {
+    const link = parsePairingLink(`${relayOrigin}/d/${body.deviceId}/`);
+    if (link) return { ok: true, link, name: typeof body.name === 'string' ? body.name : '', ticket: body.ticket };
+  }
+  if (response.status === 429) return { ok: false, reason: 'rate-limited', retryAfter: Number(body.retryAfter) || 60 };
+  if (response.status === 404 && body.status === 'invalid-code') return { ok: false, reason: 'invalid' };
+  return { ok: false, reason: 'outdated' };
 }
 
 /** The pairing link inside a scanned QR payload or pasted text (the desktop

@@ -97,6 +97,9 @@ export function createSessionResume(deps, { ingestSessionIntoMemory, closeSurfac
   }
 
   async function resume(id) {
+    // An addressed runtime may only reopen its own conversation; checked
+    // before anything is retired or closed.
+    deps.assertResumeTarget?.(id);
     clearRoutePreparation?.();
     const prev = getSession();
     // Captured before the manager reopens anything: the scratch decision for

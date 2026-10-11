@@ -37,6 +37,7 @@ test('normalizes legacy claims with a bounded fallback lifetime', () => {
     platform: '',
     browser: '',
     desktop: false,
+    method: 'qr',
     expiresAt: now + REMOTE_CLAIM_FALLBACK_LIFETIME_MS,
   });
   assert.equal(normalizeRemoteClientClaim(claim({ expiresAt: now }), now), null);

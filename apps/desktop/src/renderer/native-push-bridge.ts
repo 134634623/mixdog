@@ -26,7 +26,7 @@ import type { RemoteShimContext } from './remote-shim-state';
  *  ships in every renderer bundle and would pull the whole shim along. */
 const REMOTE_CONNECTION_READY_EVENT = 'mixdog:remote-connection-ready';
 
-export interface NativePushRegistration {
+interface NativePushRegistration {
   platform: 'apns' | 'fcm';
   token: string;
   publicKey: string;
@@ -35,7 +35,7 @@ export interface NativePushRegistration {
 }
 
 /** `window.mixdogRemoteNativePush`, published by the remote shim. */
-export interface NativePushHost {
+interface NativePushHost {
   /** The CURRENT host advertised `nativePush: 1`; re-read per use because a
    *  reconnect may land on another host. */
   available(): boolean;

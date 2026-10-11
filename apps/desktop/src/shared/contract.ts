@@ -85,6 +85,7 @@ import type {
   DesktopRemoteAccessInfo,
   DesktopRemoteClientClaim,
   DesktopRemoteHost,
+  DesktopRemotePairCode,
   DesktopRendererDiagnostic,
   DesktopSessionSummary,
   DesktopTextFileEncoding,
@@ -125,6 +126,10 @@ export interface DesktopApi {
   chooseWorkspace?(): Promise<DesktopWorkspace | null>;
   saveWorkspace?(workspaceFile: string | null, folders: DesktopWorkspaceFolder[]): Promise<DesktopWorkspace | null>;
   readEditorSettings?(projectPath: string, relPath: string, workspaceFile?: string): Promise<DesktopEditorSettings>;
+  readMarkdownDefaultView?(): Promise<DesktopEditorSettings['markdownDefaultView']>;
+  writeMarkdownDefaultView?(
+    view: DesktopEditorSettings['markdownDefaultView']
+  ): Promise<DesktopEditorSettings['markdownDefaultView']>;
   startProject(projectPath: string): Promise<SessionSnapshot>;
   startProjectTask(projectPath: string): Promise<SessionSnapshot>;
   startTask(): Promise<SessionSnapshot>;
@@ -318,8 +323,16 @@ export interface DesktopApi {
   revokeRemoteAccessClient?(clientId: string): Promise<DesktopRemoteAccessInfo | null>;
   /** "Connect to another PC": hosts saved on this machine. Native desktop only. */
   listRemoteHosts?(): Promise<DesktopRemoteHost[]>;
-  /** Saves the host named by a pairing link and opens its remote window. */
-  connectRemoteHost?(link: string, name?: string): Promise<DesktopRemoteHost>;
+  /** Redeems the main PC's 6-digit code, saves that host and opens its remote
+   *  window, which asks the host for approval. */
+  connectRemoteHostByCode?(code: string): Promise<DesktopRemoteHost>;
+  /** Settings → Connection → Connect to this PC: the 6-digit code. 'ensure'
+   *  returns the live one (minting it if needed), 'renew' replaces it, and
+   *  'release' withdraws it when the screen closes. */
+  getRemotePairCode?(action: 'ensure' | 'renew' | 'release'): Promise<DesktopRemotePairCode | null>;
+  /** A remote window's PC switcher asked this machine to show Settings →
+   *  Connection → Connect to another PC. */
+  subscribeShowConnectionSettings?(listener: () => void): () => void;
   /** Opens (or focuses) a saved host's remote window. */
   openRemoteHost?(id: string): Promise<DesktopRemoteHost[]>;
   /** Closes the host's window and clears its stored pairing. */

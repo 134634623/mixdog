@@ -110,7 +110,31 @@ export function isInstalledWebAppSurface(): boolean {
  * single predicate. */
 export function isInstalledMobileWebAppSurface(): boolean {
   if (remoteWindowInfo() || nativeAppInfo()) return true;
+  if (isDirectBrowserSurface()) return true;
   return isMobileDeviceSurface() && isInstalledWebAppSurface();
+}
+
+// Pairing v2: a browser tab (phone or PC) may hold a credential and run the
+// app itself, with no install, once its host said it supports that. The mark
+// lives in this origin's storage next to the credential it enables, so an old
+// host (which never gets the mark) keeps the install-gated behaviour.
+const DIRECT_BROWSER_KEY = 'mixdog.directBrowser';
+
+export function markDirectBrowserSurface(): void {
+  try {
+    localStorage.setItem(DIRECT_BROWSER_KEY, '1');
+  } catch {
+    /* private storage: the tab cannot hold a credential anyway */
+  }
+}
+
+export function isDirectBrowserSurface(): boolean {
+  if (!isRemoteBrowserRenderer()) return false;
+  try {
+    return localStorage.getItem(DIRECT_BROWSER_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 /** Device width in the CURRENT orientation; the projected layout viewport is

@@ -12,6 +12,42 @@ import { createDisposeAction } from './lifecycle/dispose.mjs';
 export function createSessionLifecycleApi(bag, { restoreTranscriptItems, oauthFlows }) {
   const { runtime, pushNotice, removeNotice, setProgressHint, finishToolApproval } = bag;
 
+  // Canonical close = execution fence at the local-session boundary. The fence
+  // is raised synchronously BEFORE the runtime/manager close (which cancels the
+  // session's shells and so triggers completion notifications), so no queue
+  // drain, completion wake, pending-resume kick or new submission can start
+  // work for a conversation that is being closed. A durable close that fails
+  // restores admission with every accepted input intact; one that succeeds
+  // leaves the session terminal and settles queued submissions explicitly.
+  function closeCanonical(reason) {
+    const flags = bag.flags || {};
+    const previous = flags.admission || 'open';
+    if (previous === 'terminal') return runtime.closeCanonicalSession?.(reason) === true;
+    flags.admission = 'closing';
+    let closed = false;
+    try {
+      closed = runtime.closeCanonicalSession?.(reason) === true;
+    } catch (error) {
+      flags.admission = previous;
+      restoreAdmission();
+      throw error;
+    }
+    if (!closed) {
+      flags.admission = previous;
+      restoreAdmission();
+      return false;
+    }
+    flags.admission = 'terminal';
+    flags.admissionGeneration = (Number(flags.admissionGeneration) || 0) + 1;
+    bag.settleClosedQueue?.();
+    return true;
+  }
+
+  function restoreAdmission() {
+    void bag.drain?.();
+    bag.flushDeferredExecutionPendingResumeKick?.();
+  }
+
   return {
     resolveToolApproval: (id, decision = {}) => {
       const approved = decision === true || decision?.approved === true;
@@ -49,7 +85,9 @@ export function createSessionLifecycleApi(bag, { restoreTranscriptItems, oauthFl
     deliverToolCompletion: (sessionId, text, meta = {}) =>
       runtime.deliverToolCompletion?.(sessionId, text, meta) === true,
 
-    closeCanonicalSession: (reason = 'canonical-session-close') => runtime.closeCanonicalSession?.(reason) === true,
+    closeCanonicalSession: (reason = 'canonical-session-close') => closeCanonical(reason),
+
+    bindSessionAddress: (sessionId) => runtime.bindSessionAddress?.(sessionId) === true,
 
     ...createDisposeAction(bag, { oauthFlows }),
   };

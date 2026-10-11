@@ -53,7 +53,7 @@ test('sequence reply exposes executed phases and one separate final observation 
   assert.equal(reply.image.data, 'fixture');
 });
 
-function holdRunner({ stepReply, release, delivery }) {
+function holdRunner({ stepReply, release, delivery, capture }) {
   const events = [];
   const runner = createSequenceRunner({
     sessionIdFor: () => 's',
@@ -64,6 +64,7 @@ function holdRunner({ stepReply, release, delivery }) {
     },
     captureAfterAction: async () => {
       events.push('capture');
+      await capture?.();
       return { metadata: { ok: true } };
     },
     releaseSequenceHolds: async (sessionId) => {
@@ -165,6 +166,29 @@ test('a hold cleanup failure outranks why the sequence stopped', async () => {
     assert.match(error.cause.message, /^user_input_active/);
     return true;
   });
+});
+
+test('a failed after-capture keeps a failed hold release as the reported failure', async () => {
+  const captureFails = async () => {
+    throw new Error('observation_unavailable: no frame');
+  };
+  const unreleased = holdRunner({
+    stepReply: (command) => ({ ok: true, action: command.action }),
+    release: async () => {
+      throw new Error('worker_exited: the worker died');
+    },
+    capture: captureFails,
+  });
+  await assert.rejects(unreleased.run(), (error) => {
+    assert.match(error.message, /^input_cleanup_unconfirmed: worker_exited/);
+    assert.match(error.message, /observation_unavailable/);
+    assert.match(error.cause.message, /^observation_unavailable/);
+    return true;
+  });
+  assert.deepEqual(unreleased.events.slice(-2), ['release:s', 'capture']);
+
+  const released = holdRunner({ stepReply: (command) => ({ ok: true, action: command.action }), capture: captureFails });
+  await assert.rejects(released.run(), /^Error: observation_unavailable/);
 });
 
 test('a refused worker release becomes a cleanup failure unless it names its own code', () => {

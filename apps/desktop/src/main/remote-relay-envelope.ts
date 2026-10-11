@@ -10,6 +10,9 @@ export interface RelayEnvelopeDispatcherDeps {
   onClientOpen(clientId: string, credentialId: string): void;
   onClientClose(clientId: string): void;
   onMedia(envelope: Record<string, unknown>): void;
+  /** Pairing v2: the relay's answer to a published 6-digit code, or its
+   *  notice that someone redeemed it. */
+  onPairCode?(envelope: Record<string, unknown>): void;
   /** The relay's verdict on a native push (invalid token, rate limit). */
   onNativePushResult?(envelope: Record<string, unknown>): void;
 }
@@ -25,6 +28,10 @@ export function createRelayEnvelopeDispatcher(
     if (deps.control.settle(envelope)) return;
     if (envelope.type === 'native-push-result') {
       deps.onNativePushResult?.(envelope);
+      return;
+    }
+    if (envelope.type === 'pair-code-ack' || envelope.type === 'pair-code-used') {
+      deps.onPairCode?.(envelope);
       return;
     }
     if (envelope.type === 'client-claim') {

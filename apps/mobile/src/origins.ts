@@ -1,16 +1,16 @@
 // Which origins may load in the app's WebView and talk to the native bridge:
 // the bundled pairing screen and the relay origins of paired hosts — nothing
-// else. The same rules live in android `OriginPolicy.java` and ios
-// `MixdogOriginPolicy.swift`; test-vectors/origin-policy.json pins all three.
-import type { HostBook } from './hosts.ts';
+// else. The same rules live in android `OriginPolicy.java` and the ios
+// `MixdogOriginPolicy` enum (MixdogNativeBridge.swift);
+// test-vectors/origin-policy.json pins all three.
+import { type HostBook, LOOPBACK_HOSTS } from './hosts.ts';
 
 /** The bundled pairing screen: Android serves it at https://localhost
  *  (capacitor `androidScheme`), iOS at capacitor://localhost. */
-export const BUNDLED_ORIGINS: readonly string[] = ['https://localhost', 'capacitor://localhost'];
+const BUNDLED_ORIGINS: readonly string[] = ['https://localhost', 'capacitor://localhost'];
 export const MAX_ORIGINS = 32;
 
 const ORIGIN = /^([a-z][a-z0-9+.-]*):\/\/(\[[0-9a-f:]+\]|[^/?#:@[\]\s]+)(?::(\d+))?(?:[/?#]|$)/iu;
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const DEFAULT_PORTS: Record<string, string> = { 'https:': '443', 'http:': '80' };
 
 /** `scheme://host[:port]` (lower-case, default port dropped) of a URL, or null

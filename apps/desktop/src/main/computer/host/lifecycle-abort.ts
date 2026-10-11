@@ -33,14 +33,12 @@ export async function cleanupAbortedInput(
   >,
   recovery?: InputRecoveryState,
   restoreDesktop = true,
-  sweep = false,
-  confirmedSessionId?: string
+  sweep = false
 ): Promise<boolean> {
   if (host.cleanupInput) return host.cleanupInput(recovery, restoreDesktop, sweep);
   // Exited workers' inactive-window ledgers are cleared whatever the restore
-  // settings or foreground state. `confirmedSessionId` names a session whose
-  // workers this abort has already confirmed stopped.
-  const ledgers = process.platform === 'win32' ? (host.pendingInactiveLedgers?.(confirmedSessionId) ?? []) : [];
+  // settings or foreground state; a possibly-live worker's ledger is never offered.
+  const ledgers = process.platform === 'win32' ? (host.pendingInactiveLedgers?.() ?? []) : [];
   if (!sweep && !recovery?.targetWindowId && ledgers.length === 0) return true;
   const confirmed = await new Promise<boolean>((resolve) => {
     const abortEnvironment = {
@@ -213,7 +211,7 @@ export function createSessionAbort(
       }
       const cleaned = await queue.runForegroundExclusive(
         sessionId,
-        () => cleanupAbortedInput(host, recovery, restoreDesktop, sweep, sessionId),
+        () => cleanupAbortedInput(host, recovery, restoreDesktop, sweep),
         { requireFreshAfterWait: false, allowWhileUserControl: true }
       );
       if (!cleaned) {

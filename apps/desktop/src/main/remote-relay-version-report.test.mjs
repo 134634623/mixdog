@@ -52,14 +52,14 @@ async function leg(options) {
 test('the device leg reports the desktop build before it registers its token', async () => {
   const frames = await leg({ appVersion: '1.2.3', rendererRelease: 'a'.repeat(64) });
   const types = frames.map((frame) => frame.type);
-  assert.deepEqual(types, ['desktop-lanes', 'desktop-version', 'set-client-token']);
-  assert.deepEqual(frames[1], { type: 'desktop-version', appVersion: '1.2.3', rendererRelease: 'a'.repeat(64) });
+  assert.deepEqual(types, ['desktop-lanes', 'desktop-name', 'desktop-version', 'set-client-token']);
+  assert.deepEqual(frames[2], { type: 'desktop-version', appVersion: '1.2.3', rendererRelease: 'a'.repeat(64) });
 });
 
 test('a build that cannot name its version sends no report (relay treats it as legacy)', async () => {
   const frames = await leg({});
   assert.deepEqual(
     frames.map((frame) => frame.type),
-    ['desktop-lanes', 'set-client-token']
+    ['desktop-lanes', 'desktop-name', 'set-client-token']
   );
 });

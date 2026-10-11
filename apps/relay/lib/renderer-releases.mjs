@@ -30,15 +30,15 @@ import { join } from 'node:path';
 
 export const LEGACY_RELEASE_ID = 'legacy';
 export const RELEASE_INDEX_FILE = 'index.json';
-export const KEEP_LATEST_RELEASES = 3;
-export const MAX_RETAINED_RELEASES = 6;
-export const DEVICE_REFERENCE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const KEEP_LATEST_RELEASES = 3;
+const MAX_RETAINED_RELEASES = 6;
+const DEVICE_REFERENCE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 const RELEASE_ID = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
 export const DESKTOP_VERSION = /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/;
 export const SHELL_VERSION = /^[a-f0-9]{64}$/;
 
-export function isReleaseId(value) {
+function isReleaseId(value) {
   return RELEASE_ID.test(String(value || ''));
 }
 

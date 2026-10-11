@@ -419,6 +419,21 @@ function rowShowsOutcome(presentation: ToolActivityPresentation): boolean {
   return (splitLineDeltaTokens(presentation.resultLabel) as DetailLinePart[]).some((part) => part.delta);
 }
 
+/** The facts an open call owes the reader ("28 files · sorted natural", "37
+ *  lines", a background task's status). They ride in the open row's header
+ *  band beside the title, as a table header carries its count, instead of a
+ *  loose second line between the band and the body. */
+function toolActivityMetaLine(presentation: ToolActivityPresentation): string {
+  return [
+    presentation.metaText,
+    presentation.tone === 'neutral' && !rowShowsOutcome(presentation) ? presentation.resultLabel : '',
+    ...(presentation.fieldsInline ? presentation.fields.map((field) => `${field.label} ${field.value}`) : []),
+  ]
+    .filter(Boolean)
+    .map(shortMachineId)
+    .join(' · ');
+}
+
 function ToolRowOutcome({ presentation }: { presentation: ToolActivityPresentation }) {
   if (!presentation.resultLabel) return null;
   if (presentation.tone !== 'neutral') {
@@ -497,6 +512,9 @@ function renderToolActivityHeader({
             </small>
           )}
       </span>
+      {open && presentation.hasDetails && toolActivityMetaLine(presentation) && (
+        <span className="tool-activity-item-meta">{toolActivityMetaLine(presentation)}</span>
+      )}
       <ToolRowOutcome presentation={presentation} />
       {presentation.pending && <ToolWorkingStatus startedAt={startedAt} spark />}
       {presentation.pending && (
@@ -685,20 +703,6 @@ function renderToolActivityDetails(
   return (
     <div className="tool-activity-item-body" id={contentId}>
       <ToolActivityPreview mode={mode} hiddenLines={output.hidden} onShowMore={onShowMore}>
-        {(presentation.metaText ||
-          (presentation.tone === 'neutral' && presentation.resultLabel && !rowShowsOutcome(presentation)) ||
-          (presentation.fieldsInline && presentation.fields.length > 0)) && (
-          <p className="tool-activity-item-meta">
-            {[
-              presentation.metaText,
-              presentation.tone === 'neutral' && !rowShowsOutcome(presentation) ? presentation.resultLabel : '',
-              ...(presentation.fieldsInline ? presentation.fields.map((field) => `${field.label} ${field.value}`) : []),
-            ]
-              .filter(Boolean)
-              .map(shortMachineId)
-              .join(' · ')}
-          </p>
-        )}
         {presentation.targets.length > 0 && presentation.sections.length === 0 && (
           <section className="tool-activity-item-section">
             <span>{TOOL_DETAIL_LABELS.targets}</span>
@@ -766,8 +770,16 @@ function ToolActivityPreview({
       setClipped(false);
       return;
     }
-    const cut = (element: Element) => element.scrollHeight > element.clientHeight + 1;
-    const measure = () => setClipped([...frame.querySelectorAll(PREVIEW_CUT_SELECTOR)].some(cut));
+    // Each box the preview actually cuts is marked, so only it fades out.
+    const measure = () => {
+      let any = false;
+      for (const element of frame.querySelectorAll(PREVIEW_CUT_SELECTOR)) {
+        const cut = element.scrollHeight > element.clientHeight + 1;
+        element.toggleAttribute('data-preview-cut', cut);
+        any ||= cut;
+      }
+      setClipped(any);
+    };
     measure();
     if (typeof ResizeObserver !== 'function') return;
     const observer = new ResizeObserver(measure);

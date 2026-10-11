@@ -2,7 +2,7 @@
 // `mobile-v*` tags. The app asks the public Releases API for a newer one and
 // offers the download; installing stays with the system package installer.
 
-export const RELEASES_API = 'https://api.github.com/repos/tribgames/mixdog/releases?per_page=20';
+const RELEASES_API = 'https://api.github.com/repos/tribgames/mixdog/releases?per_page=20';
 const TAG_PREFIX = 'mobile-v';
 
 export interface ReleaseAsset {

@@ -49,7 +49,7 @@ function headGrowthPatch(previous, snapshot) {
   return patch?.itemsPrepend ? patch : null;
 }
 
-export function createRevisionSteps({ revisionEpoch, index, updateEntryBusy }) {
+export function createRevisionSteps({ revisionEpoch, index, updateEntryBusy, log = () => {} }) {
   // One clock owns every snapshot served by this daemon, including stored
   // views and replacement runtimes. Per-entry counters restarted after idle
   // eviction, so clients retaining the old baseline discarded new turns.
@@ -97,12 +97,29 @@ export function createRevisionSteps({ revisionEpoch, index, updateEntryBusy }) {
   function advance(entry) {
     // Deltas are computed against the WINDOWED snapshot, so a tail-only
     // baseline keeps receiving ordinary suffix patches.
-    const snapshot = windowTranscriptSnapshot(entry, snapshotOf(entry));
-    const projectedSessionId = String(snapshot?.sessionId || '');
+    const current = windowTranscriptSnapshot(entry, snapshotOf(entry));
+    const projectedSessionId = String(current?.sessionId || '');
     const addressedSessionId = String(entry.addressedSessionId || '');
     if (addressedSessionId && projectedSessionId && projectedSessionId !== addressedSessionId) {
-      throw new Error(`session ${addressedSessionId} changed its durable address to ${projectedSessionId}`);
+      // The runtime now reports another conversation. Throwing here failed
+      // every read of this entry (view sync, getSnapshot, push watcher), so
+      // keep serving what this address last published and say so once.
+      if (entry.addressMismatchLogged !== projectedSessionId) {
+        entry.addressMismatchLogged = projectedSessionId;
+        log(`session ${addressedSessionId} changed its durable address to ${projectedSessionId}; serving last snapshot`);
+      }
+      const stale = entry.publishedSnapshot ?? current;
+      const staleRevision = entry.revision || 0;
+      return {
+        changed: false,
+        snapshot: stale,
+        revision: staleRevision,
+        previousRevision: staleRevision,
+        patch: null,
+        prependPatch: null,
+      };
     }
+    const snapshot = current;
     if (!addressedSessionId && projectedSessionId) {
       entry.addressedSessionId = projectedSessionId;
     }

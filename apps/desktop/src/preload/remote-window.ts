@@ -1,6 +1,6 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
-import { REMOTE_HOST_ARGUMENT } from '../shared/remote-window';
+import { REMOTE_HOST_ARGUMENT, REMOTE_WINDOW_IPC, type RemoteWindowSwitcherBridge } from '../shared/remote-window';
 
 // The "Connect to another PC" window loads the host's relay web app, which runs
 // on the remote shim. This preload deliberately exposes NO desktop bridge: only
@@ -22,3 +22,13 @@ function readHost(): { hostId: string; hostName: string } | null {
 
 const host = readHost();
 if (host) contextBridge.exposeInMainWorld('mixdogRemoteWindow', Object.freeze(host));
+
+// The top-bar PC switcher: saved PC names and online state, opening a saved
+// one, and a way to reach this machine's connection settings. No route,
+// credential or host data crosses; the main process checks the caller.
+const switcher: RemoteWindowSwitcherBridge = {
+  listHosts: () => ipcRenderer.invoke(REMOTE_WINDOW_IPC.list),
+  openHost: (id) => ipcRenderer.invoke(REMOTE_WINDOW_IPC.open, String(id).slice(0, 64)),
+  manageConnections: () => ipcRenderer.invoke(REMOTE_WINDOW_IPC.manage),
+};
+if (host) contextBridge.exposeInMainWorld('mixdogRemoteWindowSwitcher', Object.freeze(switcher));

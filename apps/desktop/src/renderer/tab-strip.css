@@ -478,34 +478,3 @@ html[data-mixdog-mobile-tabs] .dock-header-close {
 .side-file-status-size {
   padding: 0 4px;
 }
-/* View toggle: plain text options in the footer's own grammar (no frame, no
-   fill); the active option is full ink, the other muted, hover the shared
-   hover plate like every other footer item. */
-.side-file-view-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-}
-.side-file-view-toggle button {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 4px;
-  border: 0;
-  border-radius: var(--mx-radius-sm, 4px);
-  background: transparent;
-  color: var(--mx-text-muted);
-  font: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.side-file-view-toggle button:hover,
-.side-file-view-toggle button:focus-visible {
-  background: var(--mx-hover);
-  color: var(--mx-text);
-  outline: none;
-}
-.side-file-view-toggle button[aria-pressed="true"] {
-  color: var(--mx-text);
-}

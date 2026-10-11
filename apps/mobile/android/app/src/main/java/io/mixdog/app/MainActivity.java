@@ -3,6 +3,8 @@ package io.mixdog.app;
 import android.app.NotificationManager;
 import android.content.Intent;
 import android.os.Bundle;
+import android.webkit.WebView;
+import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -17,7 +19,33 @@ public class MainActivity extends BridgeActivity {
     super.onCreate(savedInstanceState);
     MixdogNotifications.ensureChannel(this);
     parkNotificationIntent(getIntent());
+    // Added after Capacitor's own handler, so it runs first. Back closes the
+    // web app's topmost layer (its history sentinel); the bundled host picker
+    // steps back through its own history; otherwise the app goes to the
+    // background instead of finishing (and dropping the live connection).
+    getOnBackPressedDispatcher()
+        .addCallback(
+            this,
+            new OnBackPressedCallback(true) {
+              @Override
+              public void handleOnBackPressed() {
+                WebView webView = getBridge() == null ? null : getBridge().getWebView();
+                if (webView == null) {
+                  moveTaskToBack(true);
+                  return;
+                }
+                webView.evaluateJavascript(BACK_SCRIPT, (result) -> {
+                  if ("\"web\"".equals(result)) return;
+                  if ("\"local\"".equals(result) && webView.canGoBack()) webView.goBack();
+                  else moveTaskToBack(true);
+                });
+              }
+            });
   }
+
+  private static final String BACK_SCRIPT =
+      "(function(){if(history.state&&history.state.mixdogBack){history.back();return 'web'}"
+          + "return location.origin==='https://localhost'?'local':'none'})()";
 
   @Override
   protected void load() {

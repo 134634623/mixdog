@@ -14,6 +14,7 @@ import { INACTIVE_LEDGER_RECOVERY_PROGRAM, RESPONSE_MARKER } from './program';
 import { runElevatedRequest } from './elevated-launcher';
 import { computerNativeBinary, computerNativeEnvironment } from './native-host';
 import { createSessionJobs } from './session-jobs';
+import { createInactiveLedgerRegistry, type ProcessIdentity } from './inactive-ledger-registry';
 import { recordCursorDiagnostic } from '../overlay/cursor-diagnostics';
 import { assertComputerWorkerCapacity, MAX_COMPUTER_WORKERS } from './worker-capacity';
 import type { PowerShellResponse } from '../shared/types';
@@ -151,47 +152,18 @@ export interface WorkerPoolHost {
 }
 
 /**
- * A failed elevated run recovers its ledger only when the worker is known to be
- * stopped; an unconfirmed termination keeps the ledger pending for a later
- * confirmed exit or abort cleanup.
+ * A finished elevated run recovers its ledger only when the worker is known to
+ * have stopped; otherwise the ledger is held with the launcher's identity until
+ * that process is verified gone.
  */
-export function settleElevatedLedgerFailure(
-  error: unknown,
+export function settleElevatedLedger(
+  stopped: boolean,
   path: string,
   recover: (path: string) => void,
-  keepPending: (path: string) => void
+  hold: (path: string) => void
 ): void {
-  if (String((error as Error)?.message ?? error).includes('privileged_worker_cleanup_unconfirmed')) keepPending(path);
-  else recover(path);
-}
-
-/**
- * Ledgers awaiting recovery. An `exited` ledger belongs to a worker confirmed
- * gone and may be recovered by any consumer; a ledger held for a session
- * belongs to a possibly-live worker and is listed only to that session's own
- * confirmed-abort cleanup.
- */
-export function createInactiveLedgerRegistry() {
-  const owners = new Map<string, string | null>();
-  return {
-    /** The owning worker is confirmed exited. */
-    exited(path: string): void {
-      owners.set(path, null);
-    },
-    /** The owning worker's termination is unconfirmed. */
-    hold(path: string, sessionId: string): void {
-      if (!owners.has(path)) owners.set(path, sessionId);
-    },
-    forget(path: string): void {
-      owners.delete(path);
-    },
-    /** Recoverable now: exited ledgers, plus those held for `confirmedSessionId`. */
-    recoverable(confirmedSessionId?: string): string[] {
-      return [...owners]
-        .filter(([path, owner]) => (owner === null || owner === confirmedSessionId) && existsSync(path))
-        .map(([path]) => path);
-    },
-  };
+  if (stopped) recover(path);
+  else hold(path);
 }
 
 export function createWorkerPool(host: WorkerPoolHost) {
@@ -478,6 +450,12 @@ export function createWorkerPool(host: WorkerPoolHost) {
     mkdirSync(directory, { recursive: true });
     assertComputerWorkerCapacity(liveWorkerCount() + elevatedSlots + 2, maxWorkers);
     const inactiveLedger = newInactiveLedgerPath();
+    let launcher: ProcessIdentity | undefined;
+    let stopped = false;
+    const settle = () =>
+      settleElevatedLedger(stopped, inactiveLedger, recoverInactiveLedger, (path) =>
+        pendingInactiveLedgers.hold(path, launcher)
+      );
     return runElevatedRequest({
       request,
       id: nextId++,
@@ -486,25 +464,27 @@ export function createWorkerPool(host: WorkerPoolHost) {
       inputMarker,
       inactiveLedger,
       spawnProcess,
+      onWorkerIdentity: (identity) => {
+        launcher = identity;
+      },
       begin: (cancel) => {
         const job = elevatedJobs.begin(sessionId, cancel);
         elevatedSlots += 3;
         return {
-          finish(stopped) {
-            job.finish(stopped);
-            if (stopped) elevatedSlots -= 3;
+          finish(confirmed) {
+            stopped = confirmed;
+            job.finish(confirmed);
+            if (confirmed) elevatedSlots -= 3;
           },
         };
       },
     }).then(
       (value) => {
-        recoverInactiveLedger(inactiveLedger);
+        settle();
         return value;
       },
       (error) => {
-        settleElevatedLedgerFailure(error, inactiveLedger, recoverInactiveLedger, (path) =>
-          pendingInactiveLedgers.hold(path, sessionId)
-        );
+        settle();
         throw error;
       }
     );
@@ -555,13 +535,15 @@ export function createWorkerPool(host: WorkerPoolHost) {
     },
     /** User-acknowledged recovery only: releases unconfirmed elevated sessions
      *  and their slots, unless an elevated job is still pending. */
-    releaseUnconfirmedElevated(): void {
+    async releaseUnconfirmedElevated(): Promise<boolean> {
+      // Only a verified-gone launcher releases its job; one still alive (or
+      // unverifiable) keeps its ledger held and the sessions unconfirmed.
+      if (!(await pendingInactiveLedgers.promoteGone())) return false;
       elevatedSlots -= elevatedJobs.releaseUnconfirmed() * 3;
+      return true;
     },
-    /** Ledgers safe to recover: exited workers', plus those of `confirmedSessionId`'s
-     *  elevated worker once that session's own abort has confirmed it stopped. */
-    pendingInactiveLedgers: (confirmedSessionId?: string): string[] =>
-      pendingInactiveLedgers.recoverable(confirmedSessionId),
+    /** Ledgers of workers confirmed gone, safe for any cleanup to recover. */
+    pendingInactiveLedgers: (): string[] => pendingInactiveLedgers.recoverable(),
     inactiveLedgersRecovered(paths: string[]): void {
       for (const path of paths) pendingInactiveLedgers.forget(path);
     },

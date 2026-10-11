@@ -75,9 +75,15 @@ export function useUsageRailPin(
     };
     read();
     const unsubscribe = subscribeSetupChanges(read);
+    // Remote clients: a read made while the connection was down fails and
+    // would keep the code default (pinned) over the user's real choice until
+    // a reload. Same value as REMOTE_CONNECTION_READY_EVENT (remote-shim-state),
+    // not imported so the desktop rail does not pull the remote shim in.
+    window.addEventListener('mixdog:remote-connection-ready', read);
     return () => {
       live = false;
       unsubscribe();
+      window.removeEventListener('mixdog:remote-connection-ready', read);
     };
   }, [enabled]);
 

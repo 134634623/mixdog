@@ -3,7 +3,13 @@
 // breadcrumb row).
 import { useEffect, useMemo, useRef } from 'react';
 import { t } from './i18n';
-import { delimiterForPath, delimitedWidth, parseDelimited, type EditorViewMode } from './editor-delimited';
+import {
+  delimiterForPath,
+  delimitedWidth,
+  editorViewModes,
+  parseDelimited,
+  type EditorViewMode,
+} from './editor-delimited';
 import type { editorViewKindForPath } from './editor-delimited';
 import type { DocumentPreview } from './editor-document-model';
 import type { EditorFileLoad } from './editor-file-loader';
@@ -44,6 +50,9 @@ export function useEditorSideChrome({
   viewMode,
   viewSnapshot,
   changeViewMode,
+  tocOpen,
+  toggleToc,
+  onOpenPreviewToSide,
   dirty,
   saving,
   save,
@@ -68,6 +77,10 @@ export function useEditorSideChrome({
   viewMode: EditorViewMode;
   viewSnapshot: string | null;
   changeViewMode(next: EditorViewMode): void;
+  tocOpen: boolean;
+  toggleToc(): void;
+  /** Main tab only: opens this file as a Preview in the side dock. */
+  onOpenPreviewToSide?(): void;
   dirty: boolean;
   saving: boolean;
   save(): Promise<boolean>;
@@ -102,9 +115,16 @@ export function useEditorSideChrome({
     viewToggle = {
       value: viewMode,
       renderedLabel: sideViewToggle === 'table' ? t('Table') : t('Preview'),
+      modes: editorViewModes(sideViewToggle),
       onChange: (next) => sideChromeRef.current.changeViewMode(next),
     };
   }
+  const markdownRendered = sideViewToggle === 'markdown' && viewMode !== 'source';
+  const toc: SideFileChrome['toc'] = markdownRendered ? { open: tocOpen, onToggle: toggleToc } : undefined;
+  const sideBySide: SideFileChrome['sideBySide'] =
+    sideViewToggle === 'markdown' && viewMode === 'source' && onOpenPreviewToSide
+      ? { onOpen: onOpenPreviewToSide }
+      : undefined;
   const remote = isRemoteHostRenderer();
   const fileChrome: SideFileChrome = {
     editable: sideEditable,
@@ -112,6 +132,8 @@ export function useEditorSideChrome({
     saving,
     tableSize,
     viewToggle,
+    toc,
+    sideBySide,
     problems: sideEditable ? { ...problemStatus, onToggle: showProblems } : undefined,
     cursor: sideTextEditor
       ? { label: selectionLabel, short: `${cursorPosition.line}:${cursorPosition.column}`, onGoto: gotoLine }
@@ -144,6 +166,10 @@ export function useEditorSideChrome({
     sideViewToggle,
     sideOpenDefault,
     viewMode,
+    markdownRendered,
+    tocOpen,
+    toggleToc,
+    onOpenPreviewToSide,
     dirty,
     saving,
     api,

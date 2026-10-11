@@ -66,9 +66,14 @@ export function registerSessionIpc({
     DESKTOP_IPC.revokeRemoteAccessClient,
     (_event, clientId) => revokeRemoteAccessClient?.(requiredString(clientId, 'clientId')) ?? null
   );
-  handle(DESKTOP_IPC.listRemoteHosts, () => remoteHosts?.list() ?? []);  handle(DESKTOP_IPC.connectRemoteHost, (_event, link, name) => {
+  // The 6-digit code lives only while Settings → Connection is open.
+  handle(DESKTOP_IPC.remotePairCode, (_event, action) =>
+    invokeDesktopOperation('remoteAccessPairCode', [action === 'renew' || action === 'release' ? action : 'ensure'])
+  );
+  handle(DESKTOP_IPC.listRemoteHosts, () => remoteHosts?.list() ?? []);
+  handle(DESKTOP_IPC.connectRemoteHostByCode, (_event, code) => {
     if (!remoteHosts) throw new Error('Connecting to another PC is unavailable.');
-    return remoteHosts.connect(requiredString(link, 'link', 2_048), typeof name === 'string' ? name : undefined);
+    return remoteHosts.connectByCode(requiredString(code, 'code', 16));
   });
   handle(DESKTOP_IPC.openRemoteHost, (_event, id) => {
     if (!remoteHosts) throw new Error('Connecting to another PC is unavailable.');

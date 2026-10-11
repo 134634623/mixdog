@@ -839,16 +839,18 @@
   line-height: var(--mx-line-minor);
   text-align: center;
 }
+/* Popup section label: one 28px box (a slash row's height), the 13px label
+   centred in it, inset to where the rows' own content starts. */
 .model-group h3,
 .slash-palette header {
-  min-height: 36px;
-  padding: 8px 4px;
+  min-height: 28px;
+  padding: 0 8px;
   color: var(--mx-text-muted);
-  font-size: var(--mx-font-micro);
+  font-size: var(--mx-font-meta);
   font-weight: var(--mx-weight-semibold);
   line-height: var(--mx-line-meta);
-  letter-spacing: var(--mx-tracking-wide);
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .model-group h3 {
   margin: 0;
@@ -927,12 +929,9 @@
   background: var(--mx-popup-bg);
   box-shadow: var(--mx-popup-shadow);
 }
-/* Section label grammar of the + menu (composer-add-menu.css): small caps on
-   the rows' own 12px text line. The 14px label sat 8px left of the row text
-   and out-sized it (user: UI가 좀 튀는데 — 점프 그거). */
+/* Slash rows start their text 12px in; the label starts on the same line. */
 .slash-palette header {
-  min-height: 0;
-  padding: 8px 12px 4px;
+  padding: 0 12px;
   color: var(--mx-text-faint);
 }
 .slash-palette button {

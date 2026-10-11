@@ -1,3 +1,4 @@
+import { Monitor } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { DesktopRemoteHost } from '../../shared/contract';
@@ -8,13 +9,17 @@ import type { CapabilityApi } from './capability-data';
 
 const HOSTS_REFRESH_MS = 3_000;
 
-/** "Connect to another PC": paste the pairing link from the other computer's
- *  Settings → Connection, then manage the computers saved here. Each opens its
- *  own window; this app stays fully usable beside it. */
+/** Two-line code input: accepts `482917`, `482 917`, `482·917`. */
+function normalizeCodeInput(text: string): string {
+  return text.replace(/\D/gu, '').slice(0, 6);
+}
+
+/** "Connect to another PC": the 6-digit code shown on the other computer's
+ *  Settings → Connection, then the computers saved here. Each opens its own
+ *  window; this app stays fully usable beside it. */
 export function RemoteHostsPanel({ api }: { api: CapabilityApi }) {
   const [hosts, setHosts] = useState<DesktopRemoteHost[]>([]);
-  const [link, setLink] = useState('');
-  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState('');
   const [confirmForget, setConfirmForget] = useState('');
   const [error, setError] = useState('');
@@ -33,7 +38,7 @@ export function RemoteHostsPanel({ api }: { api: CapabilityApi }) {
     return () => window.clearInterval(timer);
   }, [api, refresh]);
 
-  if (!api.connectRemoteHost) return null;
+  if (!api.connectRemoteHostByCode) return null;
 
   const run = (key: string, action: () => Promise<unknown> | undefined): void => {
     setBusy(key);
@@ -44,96 +49,98 @@ export function RemoteHostsPanel({ api }: { api: CapabilityApi }) {
       .catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setBusy(''));
   };
+  const ready = code.length === 6;
   const connect = (): void => {
-    const target = link.trim();
-    if (!target || !api.connectRemoteHost) return;
+    if (!ready || !api.connectRemoteHostByCode) return;
     run('connect', async () => {
-      await api.connectRemoteHost?.(target, name.trim() || undefined);
-      setLink('');
-      setName('');
+      await api.connectRemoteHostByCode?.(code);
+      setCode('');
     });
   };
 
   return (
-    <Group
-      title={t('Connect to another PC')}
-      description={t(
-        'Paste the pairing link from Settings → Connection on the other computer. It opens in its own window and asks that computer for approval.'
-      )}
-    >
-      <form
-        className="settings-remote-host-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          connect();
-        }}
+    <>
+      <Group
+        title={t('Connect to another PC')}
+        description={t('Open Settings → Connection on the other computer and enter its 6-digit code.')}
       >
-        <input
-          type="url"
-          name="link"
-          value={link}
-          placeholder={t('Pairing link')}
-          aria-label={t('Pairing link')}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => setLink(event.currentTarget.value)}
-        />
-        <input
-          type="text"
-          name="name"
-          value={name}
-          maxLength={80}
-          placeholder={t('Name (optional)')}
-          aria-label={t('Name (optional)')}
-          onChange={(event) => setName(event.currentTarget.value)}
-        />
-        <ActionButton disabled={!link.trim() || busy === 'connect'} onClick={connect}>
-          {busy === 'connect' ? t('Connecting…') : t('Connect')}
-        </ActionButton>
-      </form>
-      {error && <ErrorNotice error={error} />}
-      {hosts.length > 0 && (
-        <div className="settings-resource-list">
-          {hosts.map((host) => (
-            <ResourceRow
-              key={host.id}
-              title={host.name}
-              meta={
-                host.lastConnectedAt
-                  ? t('Last connected {{lastSeen}}', {
-                      lastSeen: new Date(host.lastConnectedAt).toLocaleString(uiFormatLocale()),
-                    })
-                  : t('Not connected yet')
-              }
-              status={host.open ? 'Connected' : 'Not connected'}
-              actions={
-                <>
-                  <ActionButton
-                    disabled={Boolean(busy)}
-                    onClick={() => run(`open:${host.id}`, () => api.openRemoteHost?.(host.id))}
-                  >
-                    {host.open ? t('Show window') : t('Reconnect')}
-                  </ActionButton>
-                  <ActionButton
-                    danger
-                    disabled={Boolean(busy)}
-                    onClick={() => {
-                      if (confirmForget !== host.id) {
-                        setConfirmForget(host.id);
-                        return;
-                      }
-                      setConfirmForget('');
-                      run(`forget:${host.id}`, () => api.forgetRemoteHost?.(host.id));
-                    }}
-                  >
-                    {confirmForget === host.id ? t('Confirm forget') : t('Forget')}
-                  </ActionButton>
-                </>
-              }
-            />
-          ))}
+        <div className="settings-connection-body">
+          <form
+            className="settings-remote-host-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              connect();
+            }}
+          >
+            <span className="settings-code-input">
+              <input
+                type="text"
+                name="code"
+                className="settings-connection-input"
+                value={code.length > 3 ? `${code.slice(0, 3)}·${code.slice(3)}` : code}
+                inputMode="numeric"
+                placeholder="000·000"
+                aria-label={t('6-digit code')}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => setCode(normalizeCodeInput(event.currentTarget.value))}
+              />
+            </span>
+            <ActionButton disabled={!ready || busy === 'connect'} onClick={connect}>
+              {busy === 'connect' ? t('Connecting…') : t('Connect')}
+            </ActionButton>
+          </form>
+          {error && <ErrorNotice error={error} />}
         </div>
+      </Group>
+      {hosts.length > 0 && (
+        <Group
+          title={t('Saved PCs')}
+          description={t('Computers you have connected to. Each opens in its own window.')}
+        >
+          <div className="settings-resource-list">
+            {hosts.map((host) => (
+              <ResourceRow
+                key={host.id}
+                leading={<Monitor size={15} />}
+                title={host.name}
+                meta={
+                  host.lastConnectedAt
+                    ? t('Last connected {{lastSeen}}', {
+                        lastSeen: new Date(host.lastConnectedAt).toLocaleString(uiFormatLocale()),
+                      })
+                    : t('Not connected yet')
+                }
+                status={host.online === undefined ? (host.open ? 'Online' : undefined) : host.online ? 'Online' : 'Offline'}
+                actions={
+                  <>
+                    <ActionButton
+                      disabled={Boolean(busy)}
+                      onClick={() => run(`open:${host.id}`, () => api.openRemoteHost?.(host.id))}
+                    >
+                      {t('Open')}
+                    </ActionButton>
+                    <ActionButton
+                      danger
+                      disabled={Boolean(busy)}
+                      onClick={() => {
+                        if (confirmForget !== host.id) {
+                          setConfirmForget(host.id);
+                          return;
+                        }
+                        setConfirmForget('');
+                        run(`forget:${host.id}`, () => api.forgetRemoteHost?.(host.id));
+                      }}
+                    >
+                      {confirmForget === host.id ? t('Confirm forget') : t('Forget')}
+                    </ActionButton>
+                  </>
+                }
+              />
+            ))}
+          </div>
+        </Group>
       )}
-    </Group>
+    </>
   );
 }

@@ -239,6 +239,8 @@ export async function createLocalSessionRuntime({
   const stateStartedAt = performance.now();
   const flags = {
     disposed: false,
+    // Canonical-close execution fence: 'open' | 'closing' | 'terminal'.
+    admission: 'open',
     draining: false,
     autoClearRunning: false,
     pendingSessionReset: false,
@@ -372,6 +374,7 @@ export async function createLocalSessionRuntime({
     set,
     nextId,
     getDisposed: () => flags.disposed,
+    getAdmission: () => flags.admission || 'open',
     patchItem,
     enqueue: (...args) => bag.enqueue(...args),
     drain: (...args) => bag.drain(...args),

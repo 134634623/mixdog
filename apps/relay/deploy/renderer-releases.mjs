@@ -57,7 +57,7 @@ export function linkTree(source, destination) {
 }
 
 /** The `mixdog-shell-version` a staged renderer's index.html declares. */
-export function rendererShellVersion(rendererDir) {
+function rendererShellVersion(rendererDir) {
   const document = readFileSync(join(rendererDir, 'index.html'), 'utf8');
   const version = /<meta name="mixdog-shell-version" content="([a-f0-9]{64})">/.exec(document)?.[1];
   if (!version) throw new Error('renderer release metadata missing');

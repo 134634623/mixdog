@@ -1167,7 +1167,7 @@ test('the desktop declares its receive cap on connect, and so on redial', async 
   // header, so a policy-sized frame survives being wrapped.
   assert.match(source, /const\s+MAX_WS_PAYLOAD_BYTES\s*=\s*68\s*\*\s*1024\s*\*\s*1024/);
   const declaration =
-    /sendEnvelope\(\s*\{\s*type:\s*['"]desktop-lanes['"],\s*media:\s*true,\s*e2ee:\s*1,\s*maxPayloadBytes:\s*MAX_WS_PAYLOAD_BYTES,\s*textFrames:\s*1\s*,?\s*\}\s*\)/;
+    /sendEnvelope\(\s*\{\s*type:\s*['"]desktop-lanes['"],\s*media:\s*true,\s*e2ee:\s*1,\s*maxPayloadBytes:\s*MAX_WS_PAYLOAD_BYTES,\s*textFrames:\s*1\s*,\s*pairV2:\s*1\s*,?\s*\}\s*\)/;
   assert.match(source, declaration);
   // Inside the open handler: every connection, including every redial,
   // re-declares it before the first frame can be routed.

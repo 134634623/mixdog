@@ -46,7 +46,19 @@ export const installRemoteSocket = (ctx: RemoteShimContext): void => {
       throw error instanceof Error ? error : new Error(String(error));
     }
     if (ctx.backgroundSuspended) throw remoteConnectionInterruptedError();
-    ctx.openPromise ??= new Promise<WebSocket>((resolve, reject) => openSocketAttempt(ctx, connect, resolve, reject));
+    if (!ctx.openPromise) {
+      const attempt = new Promise<WebSocket>((resolve, reject) => openSocketAttempt(ctx, connect, resolve, reject));
+      ctx.openPromise = attempt;
+      // An attempt that failed before a socket existed (the constructor threw)
+      // never reaches a close handler, so nothing would clear it or schedule
+      // the retry: every later connect() would return this rejected promise.
+      attempt.catch(() => {
+        if (ctx.openPromise !== attempt || ctx.openingSocket || ctx.socket) return;
+        ctx.openPromise = null;
+        reportRemoteConnectionIssue('websocket-error');
+        ctx.scheduleReconnect();
+      });
+    }
     return ctx.openPromise;
   };
 

@@ -44,23 +44,17 @@ public final class MixdogNativeHost implements WebViewCompat.WebMessageListener 
     current = new WeakReference<>(this);
   }
 
-  /** (Re)register the listener for the current allow-list; takes effect on the next page load. */
+  /**
+   * Register once, before the first page load. Removing and re-adding a
+   * listener on a live page invalidates every reply proxy of that frame,
+   * including Capacitor's bridge, and the next plugin reply crashes the
+   * WebView natively. So the injection rule is every origin, and the
+   * allow-list (bundled screen + saved relays, main frame) is enforced per
+   * message in onPostMessage; navigation is limited by MixdogWebViewClient.
+   */
   void register(WebView webView) {
     if (webView == null || !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
-    try {
-      WebViewCompat.removeWebMessageListener(webView, NAME);
-    } catch (Exception ignored) {
-      // Not registered yet.
-    }
-    Set<String> rules = new HashSet<>(OriginPolicy.BUNDLED);
-    rules.remove("capacitor://localhost");
-    rules.addAll(MixdogOrigins.saved(activity));
-    try {
-      WebViewCompat.addWebMessageListener(webView, NAME, rules, this);
-    } catch (IllegalArgumentException e) {
-      // A saved origin the WebView cannot express as a rule: bundled screen only.
-      WebViewCompat.addWebMessageListener(webView, NAME, Collections.singleton("https://localhost"), this);
-    }
+    WebViewCompat.addWebMessageListener(webView, NAME, Collections.singleton("*"), this);
   }
 
   @Override
@@ -78,7 +72,6 @@ public final class MixdogNativeHost implements WebViewCompat.WebMessageListener 
       String result =
           handle(request.getString("method"), args == null ? new JSONObject() : args, OriginPolicy.isBundled(origin));
       replyProxy.postMessage(new JSONObject().put("id", request.getInt("id")).put("result", new JSONTokener(result).nextValue()).toString());
-      if ("setAllowedOrigins".equals(request.getString("method"))) view.post(() -> register(view));
     } catch (Exception ignored) {
       // Malformed message: no answer.
     }

@@ -6,14 +6,17 @@
 // Local conveniences (native file picker for attachments, OS notifications,
 // links in the default browser) are this machine's own Chromium/Electron
 // features and need no bridge into the host.
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
 
 import type { DesktopRemoteHost } from '../shared/contract';
-import { REMOTE_HOST_ARGUMENT } from '../shared/remote-window';
+import { REMOTE_HOST_ARGUMENT, REMOTE_WINDOW_IPC, type RemoteWindowHostEntry } from '../shared/remote-window';
 import {
   externalLinkTarget,
+  fetchHostPresence,
   isRemoteHostNavigation,
+  parsePairCodeInput,
   parseRemoteHostLink,
+  redeemPairCode,
   remoteHostPartition,
   remoteWindowTitle,
   remoteWindowUserAgent,
@@ -25,18 +28,65 @@ const ALLOWED_PERMISSIONS = new Set(['notifications', 'clipboard-sanitized-write
 
 export interface RemoteHostWindows {
   list(): Promise<DesktopRemoteHost[]>;
-  connect(link: string, name?: string): Promise<DesktopRemoteHost>;
+  /** Redeems a 6-digit code on this machine's relay, saves the host it names
+   *  and opens its window, which asks that host for approval. */
+  connectByCode(code: string): Promise<DesktopRemoteHost>;
   open(id: string): Promise<DesktopRemoteHost[]>;
   forget(id: string): Promise<DesktopRemoteHost[]>;
 }
 
 /** `preloadPath` comes from the main entry: this module is a lazily loaded
  *  chunk, so a path relative to its own directory would miss `out/preload`. */
-export function createRemoteHostWindows(store: RemoteHostStore, preloadPath: string): RemoteHostWindows {
+export function createRemoteHostWindows(
+  store: RemoteHostStore,
+  preloadPath: string,
+  options: {
+    /** The relay's HTTP origin a code is redeemed at; null when relay is off. */
+    relayOrigin(): string | null;
+    /** Brings Settings → Connection → Connect to another PC to the front. */
+    showConnectionSettings(): void;
+  }
+): RemoteHostWindows {
   const windows = new Map<string, BrowserWindow>();
 
-  const snapshot = (): DesktopRemoteHost[] =>
-    store.list().map((host) => toDesktopRemoteHost(host, windows.has(host.id)));
+  const snapshot = async (): Promise<DesktopRemoteHost[]> => {
+    const hosts = store.list();
+    const presence = await fetchHostPresence(hosts);
+    return hosts.map((host) => ({
+      ...toDesktopRemoteHost(host, windows.has(host.id)),
+      ...(presence.has(host.id) ? { online: presence.get(host.id) } : {}),
+    }));
+  };
+
+  // The remote window's own PC switcher (top bar). Only a window this module
+  // opened may ask, and it can only list names, open a SAVED host, or ask this
+  // machine's main window to show its connection settings; it never learns a
+  // host's route or credential.
+  const hostWindowId = (sender: Electron.WebContents): string | null => {
+    for (const [id, window] of windows) if (!window.isDestroyed() && window.webContents.id === sender.id) return id;
+    return null;
+  };
+  ipcMain.handle(REMOTE_WINDOW_IPC.list, async (event): Promise<RemoteWindowHostEntry[]> => {
+    const current = hostWindowId(event.sender);
+    if (!current) return [];
+    return (await snapshot()).map((host) => ({
+      id: host.id,
+      name: host.name,
+      online: host.online ?? null,
+      lastConnectedAt: host.lastConnectedAt,
+      current: host.id === current,
+    }));
+  });
+  ipcMain.handle(REMOTE_WINDOW_IPC.open, async (event, id) => {
+    if (!hostWindowId(event.sender) || typeof id !== 'string' || !store.get(id)) return false;
+    await openWindow(id);
+    return true;
+  });
+  ipcMain.handle(REMOTE_WINDOW_IPC.manage, (event) => {
+    if (!hostWindowId(event.sender)) return false;
+    options.showConnectionSettings();
+    return true;
+  });
 
   const prepareSession = (partition: string) => {
     const ses = session.fromPartition(partition);
@@ -46,7 +96,7 @@ export function createRemoteHostWindows(store: RemoteHostStore, preloadPath: str
     return ses;
   };
 
-  const openWindow = async (id: string): Promise<void> => {
+  const openWindow = async (id: string, ticket?: string): Promise<void> => {
     const host = store.get(id);
     if (!host) throw new Error('This computer is not saved.');
     const existing = windows.get(id);
@@ -104,17 +154,28 @@ export function createRemoteHostWindows(store: RemoteHostStore, preloadPath: str
       const body = `<meta charset="utf-8"><title>${escape(title)}</title><body style="margin:0;display:grid;place-items:center;height:100vh;background:#0e0e0e;color:#e9e9e9;font:15px system-ui"><p>Could not reach ${escape(host.name)}: ${escape(description)}. Close this window and connect again.</p>`;
       void window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(body)}`);
     });
-    await window.loadURL(host.url);
+    // The one-time ticket rides the fragment, which is never sent to the relay
+    // with the page request; the page drops it once it has used it.
+    await window.loadURL(ticket ? `${host.url}#pair=${ticket}` : host.url);
     await store.touch(id);
   };
 
   return {
-    list: async () => snapshot(),
-    async connect(link, name) {
-      const parsed = parseRemoteHostLink(link);
-      if (!parsed) throw new TypeError('That is not a Mixdog pairing link.');
-      const saved = await store.save(parsed, typeof name === 'string' ? name : '');
-      await openWindow(saved.id);
+    list: snapshot,
+    async connectByCode(rawCode) {
+      const code = parsePairCodeInput(rawCode);
+      if (!code) throw new TypeError('Enter the 6-digit code shown on the main PC.');
+      const relayOrigin = options.relayOrigin();
+      if (!relayOrigin) throw new Error('Remote access is turned off on this PC.');
+      const redeemed = await redeemPairCode(relayOrigin, code);
+      const parsed = parseRemoteHostLink(`${relayOrigin}/d/${redeemed.deviceId}/`);
+      if (!parsed) throw new Error('Update Mixdog on the main PC to connect with a code.');
+      const saved = await store.save(parsed, redeemed.name);
+      // The fresh ticket has to reach a freshly loaded page, so an open window
+      // for this host is replaced.
+      const existing = windows.get(saved.id);
+      if (existing && !existing.isDestroyed()) existing.destroy();
+      await openWindow(saved.id, redeemed.ticket);
       return toDesktopRemoteHost(saved, true);
     },
     async open(id) {

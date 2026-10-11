@@ -132,6 +132,9 @@ function revokeClient({ store, deviceId, socket, entry, sendJson, nativeBindings
 // desktop version, it only answers "this host serves media" or not.
 function declareLanes({ socket, entry, publishCapabilities }, message) {
   entry.mediaLane = message.media === true;
+  // Pairing v2 (6-digit codes, direct browser connect). Declared per leg like
+  // every other lane: an older desktop never says it, so it stays false.
+  entry.pairV2 = message.pairV2 === 1;
   // What THIS leg's receiver accepts, and whether it can take a text
   // payload inside the binary envelope. Both are per connection and both
   // are written to the state of the socket that said them: one relay-wide
@@ -148,6 +151,26 @@ function declareLanes({ socket, entry, publishCapabilities }, message) {
 // release the relay serves this device's phones; an old desktop never sends it.
 function reportVersion({ store, deviceId }, message) {
   store.recordDesktopVersion(deviceId, message);
+}
+
+// The main PC publishes its current 6-digit code (only while Settings →
+// Connection is open) and withdraws it when that screen closes. The code is
+// never logged; the answer says only whether the relay accepted it.
+function registerPairCode({ pairCodes, deviceId, socket, sendJson }, message) {
+  if (!pairCodes) return;
+  const result = pairCodes.register(deviceId, message.code, message.name);
+  sendJson(socket, { type: 'pair-code-ack', ok: result === 'ok' });
+}
+
+// The desktop's own name for itself, shown in the PC switcher of the remote
+// UI. A label only; it is never an identifier.
+function reportName({ entry }, message) {
+  entry.hostName =
+    typeof message.name === 'string' ? message.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 80) : '';
+}
+
+function clearPairCode({ pairCodes, deviceId }) {
+  pairCodes?.clear(deviceId);
 }
 
 function forwardFrame({ entry }, message) {
@@ -195,6 +218,9 @@ const DESKTOP_FRAME_HANDLERS = new Map([
   ['revoke-client', revokeClient],
   ['desktop-lanes', declareLanes],
   ['desktop-version', reportVersion],
+  ['pair-code', registerPairCode],
+  ['pair-code-clear', clearPairCode],
+  ['desktop-name', reportName],
   ['native-push-bind', bindNativeToken],
   ['native-push-unbind', unbindNativeToken],
   ['native-push', sendNativePush],
@@ -238,6 +264,7 @@ export function runDesktopLeg(context, deviceId, socket) {
     attachDesktop,
     liveDesktops,
     claims,
+    pairCodes = null,
     maxFrameBytes = MAX_FRAME_BYTES,
     ingress,
     rawSocket = null,
@@ -278,6 +305,7 @@ export function runDesktopLeg(context, deviceId, socket) {
     store,
     sendJson,
     claims,
+    pairCodes,
     publishCapabilities,
     nativePush,
     nativeBindings,

@@ -39,6 +39,93 @@ export function parseRemoteHostLink(text: unknown): ParsedRemoteHostLink | null 
   return { url: `${url.origin}/d/${deviceId}/`, deviceId };
 }
 
+/** The six digits in what a person typed (`482·917`, `482 917`), or null. */
+export function parsePairCodeInput(text: unknown): string | null {
+  const digits = String(text ?? '').replace(/[\s·.-]/gu, '');
+  return /^\d{6}$/u.test(digits) ? digits : null;
+}
+
+/** `wss://host` → `https://host` (loopback `ws://` → `http://`): the relay's HTTP origin. */
+export function relayHttpOrigin(relayUrl: string): string {
+  const url = new URL(relayUrl);
+  return `${url.protocol === 'wss:' ? 'https:' : 'http:'}//${url.host}`;
+}
+
+export interface RedeemedPairCode {
+  deviceId: string;
+  /** The host's own name for itself ('' when it did not say). */
+  name: string;
+  /** One-time proof the relay redeemed a code; rides the first claim. */
+  ticket: string;
+}
+
+type Fetch = typeof fetch;
+
+/** Redeems a 6-digit code at the relay. The relay answers a right code once
+ *  and rate-limits wrong ones, so the messages here are all a person needs. */
+export async function redeemPairCode(relayOrigin: string, code: string, doFetch: Fetch = fetch): Promise<RedeemedPairCode> {
+  const response = await doFetch(`${relayOrigin}/pair-code/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  let body: { status?: unknown; deviceId?: unknown; name?: unknown; ticket?: unknown; retryAfter?: unknown } = {};
+  try {
+    body = (await response.json()) as typeof body;
+  } catch {
+    /* an older relay answers without JSON */
+  }
+  if (response.status === 200 && typeof body.deviceId === 'string' && typeof body.ticket === 'string') {
+    return {
+      deviceId: body.deviceId,
+      ticket: body.ticket,
+      name: typeof body.name === 'string' ? body.name.slice(0, MAX_NAME_LENGTH) : '',
+    };
+  }
+  if (response.status === 429) {
+    throw new Error(`Too many attempts. Try again in ${Number(body.retryAfter) || 60} seconds.`);
+  }
+  if (response.status === 404 && body.status === 'invalid-code') {
+    throw new Error('That code is wrong or has expired. Check the new code on the main PC.');
+  }
+  throw new Error('Update Mixdog on the main PC to connect with a code.');
+}
+
+/** Which of these hosts are connected to their relay right now. Hosts on a
+ *  relay that cannot answer are simply absent from the result. */
+export async function fetchHostPresence(
+  hosts: Array<{ id: string; url: string }>,
+  doFetch: Fetch = fetch
+): Promise<Map<string, boolean>> {
+  const byOrigin = new Map<string, Array<{ id: string; deviceId: string }>>();
+  for (const host of hosts) {
+    const link = parseRemoteHostLink(host.url);
+    if (!link) continue;
+    const origin = new URL(link.url).origin;
+    byOrigin.set(origin, [...(byOrigin.get(origin) ?? []), { id: host.id, deviceId: link.deviceId }]);
+  }
+  const online = new Map<string, boolean>();
+  await Promise.all(
+    [...byOrigin].map(async ([origin, group]) => {
+      try {
+        const response = await doFetch(`${origin}/pair-code/presence`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: group.map((host) => host.deviceId).slice(0, 16) }),
+          signal: AbortSignal.timeout(4_000),
+        });
+        if (!response.ok) return;
+        const body = (await response.json()) as { online?: Record<string, unknown> };
+        for (const host of group) online.set(host.id, body.online?.[host.deviceId] === true);
+      } catch {
+        /* unreachable relay: state unknown */
+      }
+    })
+  );
+  return online;
+}
+
 export function remoteHostId(canonicalUrl: string): string {
   return createHash('sha256').update(canonicalUrl).digest('hex').slice(0, 16);
 }
@@ -49,7 +136,7 @@ export function remoteHostPartition(id: string): string {
   return `persist:remote-host-${id}`;
 }
 
-export function defaultRemoteHostName(link: ParsedRemoteHostLink): string {
+function defaultRemoteHostName(link: ParsedRemoteHostLink): string {
   return `${new URL(link.url).host} · ${link.deviceId.slice(0, 8)}`;
 }
 

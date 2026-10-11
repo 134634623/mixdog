@@ -337,7 +337,17 @@ export function createSequenceRunner(host: SequenceRunnerHost) {
     const { rows, completedSteps, stoppedReason, finalWindowId, lastTransition } = sequence;
     const completed = completedSteps === steps.length && !stoppedReason;
     const captureStartedAt = performance.now();
-    const capture = await captureAfterAction(command, finalWindowId, 0, 0);
+    let capture: Awaited<ReturnType<typeof captureAfterAction>>;
+    try {
+      capture = await captureAfterAction(command, finalWindowId, 0, 0);
+    } catch (error) {
+      // A failed capture must not hide a hold that may still be on the target.
+      if (holdCleanupError === undefined) throw error;
+      throw new Error(
+        `input_cleanup_unconfirmed: ${errorMessage(holdCleanupError)}; the after-capture also failed: ${errorMessage(error)}`,
+        { cause: error }
+      );
+    }
     const postCaptureMs = elapsedMs(captureStartedAt);
     const { unavailable: observationUnavailable, pixelUnavailable } = classifyComputerSequenceObservation(
       capture.metadata

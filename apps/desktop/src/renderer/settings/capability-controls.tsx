@@ -301,6 +301,7 @@ export function ResourceRow({
   selected = false,
   actions,
   className = '',
+  leading,
 }: {
   title: string;
   description?: string;
@@ -309,6 +310,8 @@ export function ResourceRow({
   selected?: boolean;
   actions?: ReactNode;
   className?: string;
+  /** An icon shown before the title (device kind). */
+  leading?: ReactNode;
 }) {
   let state: ReturnType<typeof settingsStatus> | null = null;
   if (status) state = settingsStatus(status);
@@ -317,6 +320,11 @@ export function ResourceRow({
     <div className={`settings-resource ${className}`.trim()} aria-current={selected ? 'true' : undefined}>
       <div>
         <div className="settings-resource-title">
+          {leading && (
+            <span className="settings-resource-icon" aria-hidden="true">
+              {leading}
+            </span>
+          )}
           <b>{title}</b>
           {state && (
             <span className={`settings-status settings-status--${state.tone}`}>

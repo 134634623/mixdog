@@ -2,6 +2,7 @@ import { existsSync, statSync } from 'node:fs';
 import * as nodeModule from 'node:module';
 import { constants as osConstants, freemem, homedir, setPriority, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
+import { createNetworkWatcher, networkSignature } from './network-watch';
 import { inlineBootScriptHash, withInlineBootScript } from './renderer-csp';
 import { pathToFileURL } from 'node:url';
 
@@ -11,6 +12,7 @@ import {
   crashReporter,
   dialog,
   ipcMain,
+  net,
   Notification,
   powerMonitor,
   powerSaveBlocker,
@@ -876,14 +878,29 @@ function remoteHostsHandle(): RemoteHostWindows {
       import('./remote-hosts'),
       import('./remote-host-windows'),
     ]);
+    const { relayHttpOrigin } = await import('./remote-hosts');
+    const { resolveRelayUrl } = await import('./remote-relay-device');
     return createRemoteHostWindows(
       await loadRemoteHostStore(desktopUserData),
-      join(import.meta.dirname, '../preload/remote-window.js')
+      join(import.meta.dirname, '../preload/remote-window.js'),
+      {
+        relayOrigin: () => {
+          const relayUrl = resolveRelayUrl(process.env);
+          return relayUrl ? relayHttpOrigin(relayUrl) : null;
+        },
+        showConnectionSettings: () => {
+          if (!mainWindow || mainWindow.isDestroyed()) return;
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send(DESKTOP_IPC.showConnectionSettings);
+        },
+      }
     );
   })());
   return {
     list: async () => (await ready).list(),
-    connect: async (link, name) => (await ready).connect(link, name),
+    connectByCode: async (code) => (await ready).connectByCode(code),
     open: async (id) => (await ready).open(id),
     forget: async (id) => (await ready).forget(id),
   };
@@ -1675,6 +1692,15 @@ if (!app.requestSingleInstanceLock()) {
         // redial the relay leg instead of waiting for the ping cycle.
         awakeService.reevaluate();
         void host.invokeDesktopOperation('remoteAccessResume', []).catch(() => {});
+      });
+      // A dead network is otherwise noticed only by the ping cycle: redial the
+      // relay leg the moment the machine is back online or its network changes.
+      createNetworkWatcher({
+        isOnline: () => net.isOnline(),
+        signature: () => networkSignature(),
+        onChange: () => {
+          void host.invokeDesktopOperation('remoteAccessResume', []).catch(() => {});
+        },
       });
       diagnosticsMemoryTimer = setInterval(
         () => {

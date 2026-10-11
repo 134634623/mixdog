@@ -440,8 +440,8 @@
   gap: 1px;
 }
 .model-catalog-panel .model-group h3 {
-  min-height: 26px;
-  padding: 4px 4px 2px;
+  min-height: 28px;
+  padding: 0 8px;
 }
 /* Keep compact brand headers pinned, but paint the flyout surface beneath
    them so scrolling rows never show through the header. */

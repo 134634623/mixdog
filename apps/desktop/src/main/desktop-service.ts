@@ -529,6 +529,13 @@ export async function createDesktopService({
         return claims.list(Date.now());
       case 'remoteAccessResolveClaim':
         return claims.resolve(String(operationArgs[0] || ''), operationArgs[1] === true);
+      case 'remoteAccessPairCode': {
+        // The code exists while Settings → Connection is open; opening it is
+        // an explicit remote-access action like the pairing card itself.
+        const action = operationArgs[0] === 'release' ? 'release' : operationArgs[0] === 'renew' ? 'renew' : 'ensure';
+        if (action !== 'release') await startRemoteServices(true);
+        return remoteRelay?.pairCode(action) ?? null;
+      }
       case 'remoteAccessRevokeClient': {
         await startRemoteServices(true);
         const clientId = String(operationArgs[0] || '');

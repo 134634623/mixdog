@@ -1,5 +1,6 @@
 import type React from 'react';
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { requestConnectionTab } from './settings/connection-intent';
 import { DESKTOP_WORKSPACE_MIN_WIDTH } from '../shared/window-layout';
 import { DesktopTitlebar, type NavigationSelection } from './navigation';
 import { usePaneWorkspace } from './pane-workspace-state';
@@ -379,6 +380,15 @@ export function App() {
     setupUiRequest: snapshot.setupUiRequest,
     setupChanged: snapshot.setupChanged,
   });
+  // A remote window's PC switcher asks this window for Connect to another PC.
+  useEffect(
+    () =>
+      window.mixdogDesktop?.subscribeShowConnectionSettings?.(() => {
+        requestConnectionTab('other');
+        openSettings('connection');
+      }),
+    [openSettings]
+  );
 
   useLaunchTabMeasurements();
   const { paneDraftSubmitFor, paneSubmitFor, submit } = useAppSubmitRouting({
@@ -455,7 +465,8 @@ export function App() {
     openSelectionInFocusedPane: paneWorkspace.openInFocused,
   });
   // Every main-tab open passes the side-file guard (bound below).
-  const { sideFileGuardRef, openFileTab, openFileInSideDock } = useSideFileGuardOpeners(openFileTabRaw);
+  const { sideFileGuardRef, openFileTab, openFileInSideDock, openPreviewToSide } =
+    useSideFileGuardOpeners(openFileTabRaw);
 
   const {
     openStudioTab,
@@ -663,6 +674,7 @@ export function App() {
     handleFileDirty,
     registerEditorSaveHandle,
     openFileTab,
+    openPreviewToSide: sideDockHostsFiles ? openPreviewToSide : undefined,
     latestEditorLocation,
     sidebarOpen,
     toggleSidebar,

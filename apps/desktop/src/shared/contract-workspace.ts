@@ -16,9 +16,20 @@ export interface DesktopRemoteClientInfo {
 }
 
 export interface DesktopRemoteAccessInfo {
+  /** The pairing URL the QR encodes. Never shown in the UI. */
   relayBrowserUrl: string;
   relayBrowserQrSvg: string;
+  /** Where a browser enters a 6-digit code (relay origin + /connect). Shown as
+   *  plain text. */
+  relayConnectUrl: string;
   clients: DesktopRemoteClientInfo[];
+}
+
+/** The 6-digit code of an open Settings → Connection screen. */
+export interface DesktopRemotePairCode {
+  /** Six digits, no separator. */
+  code: string;
+  expiresAt: number;
 }
 
 /** An installed web app asking this desktop for access. It arrives with no
@@ -31,6 +42,10 @@ export interface DesktopRemoteClientClaim {
   browser: string;
   /** Another Mixdog desktop app's remote window is asking. */
   desktop?: boolean;
+  /** QR/route, or a relay-redeemed 6-digit code. Absent from older hosts. */
+  method?: 'qr' | 'code';
+  /** When the request arrived on this desktop (epoch ms). */
+  requestedAt?: number;
   expiresAt: number;
 }
 
@@ -44,6 +59,9 @@ export interface DesktopRemoteHost {
   lastConnectedAt: number | null;
   /** Whether its window is open right now. */
   open: boolean;
+  /** Whether the host's desktop is connected to its relay right now. Absent
+   *  when the relay could not be asked. */
+  online?: boolean;
 }
 
 export interface DesktopSessionSummary {
@@ -119,6 +137,8 @@ export interface DesktopEditorSettings {
   formatOnSave: boolean;
   formatOnPaste: boolean;
   formatOnType: boolean;
+  /** View a Markdown file opens in when it has no remembered mode. */
+  markdownDefaultView: 'preview' | 'rich' | 'source';
   tabSize: number;
   insertSpaces: boolean;
   detectIndentation: boolean;

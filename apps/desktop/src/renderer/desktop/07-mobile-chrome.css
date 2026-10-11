@@ -8,9 +8,18 @@
    per device dp), so the row lands at native size on ANY phone. Order matches
    Chrome: [pill][+][count][menu/trailing]. */
 /* The desktop title band is dead weight on a phone (user: 상단 상태줄 하나
-   날리고 최상단): the Chrome toolbar IS the top row. */
+   날리고 최상단): the Chrome toolbar IS the top row. What stays is a slim strip
+   naming the PC being driven (pairing v2 PC switcher); the caption controls go. */
 html[data-mixdog-mobile-tabs] .topbar {
+  padding: 0 calc(12px * var(--mx-device-scale, 1));
+}
+html[data-mixdog-mobile-tabs] .topbar .titlebar-controls,
+html[data-mixdog-mobile-tabs] .topbar .titlebar-spacer {
   display: none;
+}
+html[data-mixdog-mobile-tabs] .remote-pc-switcher {
+  max-width: 100%;
+  margin: 0;
 }
 /* A surface that has not reached its desktop for the disconnect threshold is
    frozen, not broken: ONE dim layer with the wifi glyph blocks input until the

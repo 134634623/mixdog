@@ -10,11 +10,50 @@ import {
   type RelayE2EEPairingMaterial,
 } from '../shared/remote-e2ee';
 import { earlyUiT } from './early-ui-i18n';
-import { isInstalledMobileWebAppSurface, isMobileDeviceSurface } from './mobile-surface';
+import { nativeAppInfo } from '../shared/native-app';
+import {
+  isInstalledMobileWebAppSurface,
+  isIOSWebSurface,
+  isMobileDeviceSurface,
+  markDirectBrowserSurface,
+} from './mobile-surface';
 import { browserProfile } from './remote-browser-identity';
 import { REMOTE_PAIRING_STORAGE_KEYS, isRemoteClientCredential } from './remote-pairing-recovery';
 
 const CLAIM_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.claim;
+
+// The one-time ticket a 6-digit code was redeemed for (`#pair=<ticket>` on the
+// route the code page or the phone app sent us to). It rides the first claim so
+// the main PC's approval dialog can say "6-digit code"; the relay, not this
+// page, decides whether it is genuine. Taken off the address bar at once.
+let pairTicket = '';
+const takeTicketFromAddress = (): void => {
+  const match = /^#pair=([0-9a-f]{32})$/u.exec(location.hash);
+  if (!match) return;
+  pairTicket = match[1];
+  try {
+    history.replaceState(null, '', `${location.pathname}${location.search}`);
+  } catch {
+    /* the ticket is already held */
+  }
+};
+
+/** Whether this host takes a browser tab directly (pairing v2). An old host
+ *  keeps the install gate; one that is offline right now cannot say, and the
+ *  approval loop waits for it to come back. */
+const hostAllowsDirectBrowser = async (deviceId: string, base: string): Promise<boolean> => {
+  if (!deviceId) return false;
+  try {
+    const response = await fetch(`${new URL('/pair-code/support', base).toString()}?deviceId=${encodeURIComponent(deviceId)}`, {
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) return false;
+    const body = (await response.json()) as { online?: unknown; pairV2?: unknown };
+    return body.online !== true || body.pairV2 === true;
+  } catch {
+    return false;
+  }
+};
 
 /** The screen's status line. A failed status keeps the retry button visible. */
 type PairingStatus = (text: string, failed?: boolean) => void;
@@ -110,12 +149,15 @@ const requestApproval = async (
         deviceId,
         clientId: deps.clientId(),
         publicKey: keyPair.publicKey,
+        ...(pairTicket ? { ticket: pairTicket } : {}),
         ...profile,
       }),
     });
     // 503 is the desktop being asleep or offline, which resolves itself.
     if (response.status === 503) return '';
     if (!response.ok) throw new Error(`claim refused (${response.status})`);
+    // A ticket is single use: once the claim exists it is spent.
+    pairTicket = '';
     const body = (await response.json()) as { claimId?: unknown };
     return typeof body.claimId === 'string' ? body.claimId : '';
   };
@@ -157,6 +199,9 @@ const requestApproval = async (
       }
       const material = await openSealedRelayE2EEPairingMaterial(payload.sealed, keyPair);
       const credential = String(payload.token || '');
+      // A browser tab that was approved directly keeps running as the app.
+      if (!isInstalledMobileWebAppSurface()) markDirectBrowserSurface();
+      const directTab = layer.dataset.direct === '1';
       // A box that does not open is a refused approval, never a half pairing.
       if (!material || !isRemoteClientCredential(credential) || !deps.acceptApproval(credential, material)) {
         clearPendingClaim();
@@ -180,7 +225,9 @@ const requestApproval = async (
       } catch {
         /* no haptics */
       }
-      window.setTimeout(() => layer.remove(), 900);
+      // The tab loaded as the lightweight page; reload so the app itself mounts
+      // with the credential it now holds.
+      window.setTimeout(() => (directTab ? location.reload() : layer.remove()), 900);
       return;
     }
     clearPendingClaim();
@@ -204,6 +251,7 @@ const requestApproval = async (
 export const createRemotePairingScreen = (
   deps: RemotePairingScreenDeps
 ): ((message: string, autoAsk?: boolean) => void) => {
+  takeTicketFromAddress();
   let installPrompt: (Event & { prompt(): Promise<void> }) | null = null;
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
@@ -214,13 +262,19 @@ export const createRemotePairingScreen = (
     if (document.getElementById('mixdog-remote-pairing')) return;
     // Install instructions depend on the device, not on the current layout width.
     const mobile = isMobileDeviceSurface();
-    const standalone = isInstalledMobileWebAppSurface();
+    const installed = isInstalledMobileWebAppSurface();
     const ios =
       /iPad|iPhone|iPod/iu.test(navigator.userAgent) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const mount = () => {
+    const mount = async () => {
+      // Pairing v2: a plain browser tab connects directly when its host takes
+      // it; an old host keeps the install guide.
+      const direct = !installed && (await hostAllowsDirectBrowser(deps.deviceId, deps.serverBase()));
+      if (document.getElementById('mixdog-remote-pairing')) return;
+      const standalone = installed || direct;
       const layer = document.createElement('div');
       layer.id = 'mixdog-remote-pairing';
+      if (direct) layer.dataset.direct = '1';
       const threeSteps =
         '<ol><li><i>1</i><span data-role="step-one"></span></li>' +
         '<li><i>2</i><span data-role="step-two"></span></li>' +
@@ -234,7 +288,9 @@ export const createRemotePairingScreen = (
           '<div class="mrp-wait"><i aria-hidden="true"></i>' +
           '<b data-role="wait-title"></b></div>' +
           '<p class="mrp-status" data-role="status"></p>' +
-          '<button type="button" data-role="ask" hidden></button>';
+          '<button type="button" data-role="ask" hidden></button>' +
+          // Web push is impossible in an iPhone/iPad browser tab that is not installed.
+          '<p class="mrp-fine" data-role="push-note" hidden></p>';
       } else if (!mobile) {
         cardBody = threeSteps;
       } else {
@@ -271,6 +327,7 @@ export const createRemotePairingScreen = (
         '#mixdog-remote-pairing .mrp-wait b{font-size:15px;line-height:20px;}' +
         '#mixdog-remote-pairing .mrp-status{min-height:19px;color:#a8a8a8;font-size:13px;line-height:19px;}' +
         '#mixdog-remote-pairing .mrp-status.mrp-bad{color:#e5484d;}' +
+        '#mixdog-remote-pairing .mrp-fine{color:#7a7a80;font-size:12px;line-height:17px;}' +
         '#mixdog-remote-pairing button{width:100%;padding:13px;border:0;border-radius:12px;' +
         'background:#e9e9e9;color:#111114;font:600 15px/20px system-ui,sans-serif;cursor:pointer;}' +
         '</style>' +
@@ -282,7 +339,8 @@ export const createRemotePairingScreen = (
         '</main>';
       // Catalog text enters only textContent, never HTML.
       let heading = earlyUiT('Install Mixdog on your phone');
-      if (standalone) heading = earlyUiT('Approve this device');
+      if (direct) heading = earlyUiT('Connect Mixdog');
+      else if (standalone) heading = earlyUiT('Approve this device');
       else if (mobile) heading = earlyUiT('Install Mixdog');
       let stepOne = earlyUiT('Open this page on your phone or tablet');
       let stepTwo = earlyUiT('Install Mixdog from the mobile browser');
@@ -307,7 +365,9 @@ export const createRemotePairingScreen = (
       }
       const note = layer.querySelector<HTMLElement>('[data-role="note"]');
       if (note) {
-        if (standalone) {
+        if (direct) {
+          note.textContent = earlyUiT('Use Mixdog right in this browser, no install needed. Approve it on your main PC.');
+        } else if (standalone) {
           note.textContent = message || earlyUiT('Mixdog needs a one-time approval from the desktop it belongs to.');
         } else if (mobile) {
           note.textContent = earlyUiT(
@@ -326,6 +386,11 @@ export const createRemotePairingScreen = (
       });
       document.body.appendChild(layer);
       if (!standalone) return;
+      const pushNote = layer.querySelector<HTMLElement>('[data-role="push-note"]');
+      if (pushNote && direct && isIOSWebSurface() && !nativeAppInfo()) {
+        pushNote.textContent = earlyUiT('To get notifications, install the Mixdog app.');
+        pushNote.removeAttribute('hidden');
+      }
       const status = layer.querySelector<HTMLElement>('[data-role="status"]');
       const ask = layer.querySelector<HTMLButtonElement>('[data-role="ask"]');
       const setStatus = (text: string, failed?: boolean): void => {
@@ -349,7 +414,7 @@ export const createRemotePairingScreen = (
       if (autoAsk) start();
       else setStatus(message || earlyUiT('Open Settings → Connection, then ask again.'), true);
     };
-    if (document.body) mount();
-    else window.addEventListener('DOMContentLoaded', mount, { once: true });
+    if (document.body) void mount();
+    else window.addEventListener('DOMContentLoaded', () => void mount(), { once: true });
   };
 };

@@ -39,7 +39,7 @@ export interface NativePushStore {
 const MAX_SUBSCRIPTIONS = 32;
 const MAX_TOKEN_CHARS = 4096;
 
-export function validNativePushToken(platform: NativePushPlatform, token: unknown): string {
+function validNativePushToken(platform: NativePushPlatform, token: unknown): string {
   const value = typeof token === 'string' ? token.trim() : '';
   if (!value || value.length > MAX_TOKEN_CHARS) throw new TypeError('Native push token is invalid.');
   const pattern = platform === 'apns' ? /^[0-9a-fA-F]{32,400}$/u : /^[A-Za-z0-9_:.\-]{32,4096}$/u;
@@ -47,7 +47,7 @@ export function validNativePushToken(platform: NativePushPlatform, token: unknow
   return value;
 }
 
-export function validNativePushInput(input: {
+function validNativePushInput(input: {
   platform: unknown;
   token: unknown;
   publicKey: unknown;

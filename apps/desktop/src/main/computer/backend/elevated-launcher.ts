@@ -12,6 +12,13 @@ import { join } from 'node:path';
 import { elevatedProgramInvocation } from './elevated-program';
 import { RESPONSE_MARKER } from './program';
 import type { PowerShellResponse } from '../shared/types';
+import type { ProcessIdentity } from './inactive-ledger-registry';
+
+/** The launcher reports the elevated worker's PID and creation time as soon as
+ *  it starts, so the host can later prove that exact process is gone. Only a
+ *  complete line counts: a chunk may end inside the number. */
+const WORKER_IDENTITY_MARKER = 'MIXDOG_ELEVATED_WORKER:';
+const WORKER_IDENTITY_PATTERN = new RegExp(`${WORKER_IDENTITY_MARKER}(\\d+):(\\d+)\\r?\\n`);
 
 /** The launcher that raises one elevated worker: it re-publishes this process's
  *  environment into the elevated child (which inherits none of it through the
@@ -32,7 +39,14 @@ function elevatedLauncherCommand(): string {
     "if ($elevatedEncoded.Length -gt 30000) { throw 'privileged_worker_unavailable: launch configuration exceeds Windows command line capacity' }",
     "$arguments = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',$elevatedEncoded)",
     'try {',
-    '  $process = Start-Process -FilePath $powershell -Verb RunAs -ArgumentList $arguments -Wait -PassThru',
+    '  $process = Start-Process -FilePath $powershell -Verb RunAs -ArgumentList $arguments -PassThru',
+    // Holding the handle keeps ExitCode readable after the worker exits.
+    '  $null = $process.Handle',
+    // CIM reads an elevated process's creation time across the integrity boundary,
+    // the same source the host verifies against. A worker already gone reports none.
+    '  $created = (Get-CimInstance Win32_Process -Filter ("ProcessId=" + $process.Id)).CreationDate',
+    "  if ($null -ne $created) { [Console]::Out.WriteLine('" + WORKER_IDENTITY_MARKER + "' + $process.Id + ':' + $created.ToUniversalTime().Ticks) }",
+    '  $process.WaitForExit()',
     '  exit $process.ExitCode',
     '} catch {',
     "  [Console]::Error.WriteLine(('launcher_error:' + $_.Exception.Message))",
@@ -50,6 +64,7 @@ function runElevatedLauncher(options: {
   env: NodeJS.ProcessEnv;
   cancel: () => void;
   onSpawnFailure: () => void;
+  onIdentity: (identity: ProcessIdentity) => void;
 }): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = options.spawnProcess(
@@ -65,8 +80,14 @@ function runElevatedLauncher(options: {
     let stderr = '';
     const appendBounded = (current: string, chunk: Buffer): string =>
       `${current}${chunk.toString('utf8')}`.slice(-4096);
+    let identityReported = false;
     child.stdout.on('data', (chunk: Buffer) => {
       stdout = appendBounded(stdout, chunk);
+      const worker = identityReported ? null : WORKER_IDENTITY_PATTERN.exec(stdout);
+      if (worker) {
+        identityReported = true;
+        options.onIdentity({ pid: Number(worker[1]), startTicks: worker[2] });
+      }
     });
     child.stderr.on('data', (chunk: Buffer) => {
       stderr = appendBounded(stderr, chunk);
@@ -98,7 +119,7 @@ function runElevatedLauncher(options: {
       if (cleanupTimer) clearTimeout(cleanupTimer);
       resolve({
         code: Number(code ?? 1),
-        stdout,
+        stdout: stdout.replace(WORKER_IDENTITY_PATTERN, ''),
         stderr,
       });
     });
@@ -181,6 +202,8 @@ export async function runElevatedRequest(options: {
   inputMarker: string;
   inactiveLedger: string;
   spawnProcess: typeof spawn;
+  /** The elevated worker this run raised, once the launcher reports it. */
+  onWorkerIdentity?: (identity: ProcessIdentity) => void;
   begin: (cancel: () => void) => { finish(stopped: boolean): void };
 }): Promise<PowerShellResponse> {
   const { directory, hostScriptPath, id } = options;
@@ -216,6 +239,7 @@ export async function runElevatedRequest(options: {
         MIXDOG_ELEVATED_MARKER: RESPONSE_MARKER,
       },
       cancel,
+      onIdentity: (identity) => options.onWorkerIdentity?.(identity),
       onSpawnFailure: () => {
         stopped = true;
       },

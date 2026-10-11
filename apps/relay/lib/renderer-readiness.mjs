@@ -71,7 +71,7 @@ export function inspectRenderer(rendererDir) {
 /** The current renderer plus EVERY retained release in the registry: a broken
  *  old release would strand exactly the devices pinned to it, so any failure
  *  makes the whole relay not-ready. */
-export function inspectRendererReleases(rendererDir, releasesDir = '') {
+function inspectRendererReleases(rendererDir, releasesDir = '') {
   const body = inspectRenderer(rendererDir);
   const index = releasesDir ? readReleaseIndex(releasesDir) : null;
   if (!index) return body;

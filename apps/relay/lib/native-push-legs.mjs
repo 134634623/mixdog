@@ -4,7 +4,7 @@
 // the authenticated leg and checked against the device store on every send.
 import { MAX_MX_CHARS, NATIVE_PUSH_REASONS, validNativeToken } from './native-push.mjs';
 
-export const MAX_NATIVE_BINDINGS_PER_DEVICE = 64;
+const MAX_NATIVE_BINDINGS_PER_DEVICE = 64;
 const COLLAPSE_KEY = /^[A-Za-z0-9_-]{1,64}$/u;
 
 export function nativePushPlatforms(leg) {

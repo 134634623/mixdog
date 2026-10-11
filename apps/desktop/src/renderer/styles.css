@@ -635,3 +635,107 @@ button {
     background: var(--mx-scrim);
   }
 }
+
+/* Remote UI: the PC being driven, a Remote badge and the saved-PC menu. */
+.remote-pc-switcher {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 70%;
+  margin-right: 8px;
+  font-size: var(--mx-font-meta);
+}
+.remote-pc-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--mx-radius-md);
+  color: var(--mx-text);
+  background: var(--mx-hover);
+  font: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.remote-pc-button {
+  cursor: pointer;
+}
+.remote-pc-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ac885;
+}
+.remote-pc-dot.off {
+  background: var(--mx-text-muted);
+}
+.remote-pc-badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--mx-radius-pill);
+  box-shadow: inset 0 0 0 var(--mx-hairline) var(--mx-border-muted);
+  color: var(--mx-text-muted);
+}
+.remote-pc-note {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mx-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .remote-pc-note {
+    display: none;
+  }
+}
+.remote-pc-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  width: 280px;
+  padding: 6px;
+  border-radius: var(--mx-radius-lg, 12px);
+  background: var(--mx-bg-elevated, var(--mx-bg-base));
+  box-shadow: var(--mx-card-outline), 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.remote-pc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--mx-radius-md);
+  color: var(--mx-text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.remote-pc-item:hover:not(:disabled),
+.remote-pc-item.on {
+  background: var(--mx-hover);
+}
+.remote-pc-item:disabled {
+  cursor: default;
+}
+.remote-pc-item small {
+  display: block;
+  color: var(--mx-text-muted);
+}
+.remote-pc-item span {
+  flex: 1;
+  min-width: 0;
+}
+.remote-pc-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--mx-border-muted);
+}

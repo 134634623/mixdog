@@ -64,6 +64,8 @@ const api: DesktopApi = {
   saveWorkspace: (workspaceFile, folders) => ipcRenderer.invoke(DESKTOP_IPC.saveWorkspace, workspaceFile, folders),
   readEditorSettings: (projectPath, relPath, workspaceFile) =>
     ipcRenderer.invoke(DESKTOP_IPC.readEditorSettings, projectPath, relPath, workspaceFile),
+  readMarkdownDefaultView: () => ipcRenderer.invoke(DESKTOP_IPC.readMarkdownDefaultView),
+  writeMarkdownDefaultView: (view) => ipcRenderer.invoke(DESKTOP_IPC.writeMarkdownDefaultView, view),
   startProject: (projectPath) => ipcRenderer.invoke(DESKTOP_IPC.startProject, projectPath),
   startProjectTask: (projectPath) => ipcRenderer.invoke(DESKTOP_IPC.startProjectTask, projectPath),
   startTask: () => ipcRenderer.invoke(DESKTOP_IPC.startTask),
@@ -188,7 +190,9 @@ const api: DesktopApi = {
   resolveRemoteClientClaim: (claimId, approved) =>
     ipcRenderer.invoke(DESKTOP_IPC.resolveRemoteClientClaim, claimId, approved),
   listRemoteHosts: () => ipcRenderer.invoke(DESKTOP_IPC.listRemoteHosts),
-  connectRemoteHost: (link, name) => ipcRenderer.invoke(DESKTOP_IPC.connectRemoteHost, link, name),
+  connectRemoteHostByCode: (code) => ipcRenderer.invoke(DESKTOP_IPC.connectRemoteHostByCode, code),
+  getRemotePairCode: (action) => ipcRenderer.invoke(DESKTOP_IPC.remotePairCode, action),
+  subscribeShowConnectionSettings: (listener) => subscribeIpc(DESKTOP_IPC.showConnectionSettings, () => listener()),
   openRemoteHost: (id) => ipcRenderer.invoke(DESKTOP_IPC.openRemoteHost, id),
   forgetRemoteHost: (id) => ipcRenderer.invoke(DESKTOP_IPC.forgetRemoteHost, id),
   prefetchSession: (sessionId, transcriptItemLimit, readTraceId) =>

@@ -22,6 +22,8 @@ export function normalizeRemoteClientClaim(
     platform: String(value?.platform || '').slice(0, 80),
     browser: String(value?.browser || '').slice(0, 80),
     desktop: value?.desktop === true,
+    method: value?.method === 'code' ? 'code' : 'qr',
+    ...(Number.isFinite(value?.requestedAt) ? { requestedAt: Number(value?.requestedAt) } : {}),
     expiresAt,
   };
 }

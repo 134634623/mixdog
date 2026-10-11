@@ -7,7 +7,7 @@
 // set, and nothing in it is user data.
 export const PREVIEW_FRAME_PATH = '/preview-frame';
 
-export const PREVIEW_FRAME_HEADERS = Object.freeze({
+const PREVIEW_FRAME_HEADERS = Object.freeze({
   'Content-Security-Policy': [
     'sandbox allow-scripts',
     "default-src 'none'",
@@ -26,7 +26,7 @@ export const PREVIEW_FRAME_HEADERS = Object.freeze({
   'X-Content-Type-Options': 'nosniff',
 });
 
-export const PREVIEW_FRAME_HTML = `<!doctype html>
+const PREVIEW_FRAME_HTML = `<!doctype html>
 <meta charset="utf-8">
 <title>Preview</title>
 <script>

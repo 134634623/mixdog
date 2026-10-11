@@ -28,6 +28,7 @@ export async function buildRemoteAccessInfo(descriptor: RemoteAccessDescriptor):
   return {
     relayBrowserUrl,
     relayBrowserQrSvg: await qrSvg(relayBrowserUrl),
+    relayConnectUrl: `${new URL(relayBrowserUrl).origin}/connect`,
     clients: relay.clients ?? [],
   };
 }

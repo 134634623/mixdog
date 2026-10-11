@@ -8,7 +8,8 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { MIXDOG_HOST_CSHARP } from './native-source.ts';
 import { INACTIVE_LEDGER_RECOVERY_PROGRAM } from './program.ts';
-import { createInactiveLedgerRegistry, settleElevatedLedgerFailure } from './worker-pool.ts';
+import { settleElevatedLedger } from './worker-pool.ts';
+import { createInactiveLedgerRegistry, processIdentityGone, readProcessStartTicks } from './inactive-ledger-registry.ts';
 
 const exec = promisify(execFile);
 const STYLE_MEMBERS = `
@@ -16,37 +17,68 @@ const STYLE_MEMBERS = `
 [DllImport("user32.dll")] public static extern int SetWindowLongW(IntPtr h, int i, int v);`;
 const NOACTIVATE = 0x08000000;
 
-test('elevated ledger stays pending when worker termination is unconfirmed', () => {
+test('an elevated ledger is recovered at once only when its worker is known stopped', () => {
   const recovered = [];
-  const pending = [];
-  const recover = (path) => recovered.push(path);
-  const keep = (path) => pending.push(path);
-  settleElevatedLedgerFailure(new Error('privileged_worker_cleanup_unconfirmed: not stopped'), 'a', recover, keep);
-  assert.deepEqual({ recovered, pending }, { recovered: [], pending: ['a'] });
-  settleElevatedLedgerFailure(new Error('request failed'), 'b', recover, keep);
-  assert.deepEqual({ recovered, pending }, { recovered: ['b'], pending: ['a'] });
+  const held = [];
+  settleElevatedLedger(false, 'a', (p) => recovered.push(p), (p) => held.push(p));
+  assert.deepEqual({ recovered, held }, { recovered: [], held: ['a'] });
+  settleElevatedLedger(true, 'b', (p) => recovered.push(p), (p) => held.push(p));
+  assert.deepEqual({ recovered, held }, { recovered: ['b'], held: ['a'] });
 });
 
-test('held elevated ledgers are isolated per session until their owner is confirmed', async () => {
+test('a held ledger is promoted only after its exact process is verified gone', {
+  skip: process.platform !== 'win32',
+}, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'mixdog-ledger-registry-'));
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  // Listen before any await: 'spawn' fires on a later tick and is not replayed.
+  const spawned = new Promise((resolve) => child.once('spawn', resolve));
   try {
+    const ledger = join(directory, 'held.ledger');
+    await writeFile(ledger, '');
+    await spawned;
+    const startTicks = await readProcessStartTicks(child.pid);
+    assert.match(String(startTicks), /^\d+$/);
+    const identity = { pid: child.pid, startTicks };
     const registry = createInactiveLedgerRegistry();
-    const [live, gone] = [join(directory, 'live.ledger'), join(directory, 'gone.ledger')];
-    await writeFile(live, '');
-    await writeFile(gone, '');
-    registry.hold(live, 'session-a');
-    registry.exited(gone);
-    // Another session's cleanup, or a global one, sees only the exited ledger.
-    assert.deepEqual(registry.recoverable(), [gone]);
-    assert.deepEqual(registry.recoverable('session-b'), [gone]);
-    // unconfirmed -> confirmed: session-a's own confirmed abort releases it.
-    assert.deepEqual(registry.recoverable('session-a').sort(), [gone, live].sort());
-    // A later hold never downgrades an exited ledger; recovery forgets it.
-    registry.hold(gone, 'session-b');
-    assert.deepEqual(registry.recoverable('session-b'), [gone]);
-    registry.forget(live);
-    assert.deepEqual(registry.recoverable('session-a'), [gone]);
+    registry.exited(join(directory, 'missing.ledger'));
+    registry.hold(ledger, identity);
+
+    // Alive: the real verification refuses; the ledger stays held.
+    assert.equal(await processIdentityGone(identity), false);
+    assert.equal(await registry.promoteGone(), false);
+    assert.deepEqual(registry.recoverable(), []);
+
+    // Same PID, different start time (a reused PID): not the same process.
+    assert.equal(await processIdentityGone({ pid: child.pid, startTicks: String(BigInt(startTicks) + 1n) }), true);
+
+    // No identity was ever captured: unverifiable, so it never promotes.
+    const unknown = join(directory, 'unknown.ledger');
+    await writeFile(unknown, '');
+    registry.hold(unknown);
+    assert.equal(await registry.promoteGone(), false);
+
+    // Gone: the exact process has exited.
+    const exited = new Promise((resolve) => child.once('exit', resolve));
+    child.kill();
+    await exited;
+    assert.equal(await processIdentityGone(identity), true);
+    assert.equal(await registry.promoteGone(), false, 'the identity-less ledger still blocks');
+    assert.deepEqual(registry.recoverable(), [ledger]);
+    registry.forget(unknown);
+    assert.equal(await registry.promoteGone(), true);
+    registry.forget(ledger);
+    assert.deepEqual(registry.recoverable(), []);
+
+    // An unanswerable query is never treated as gone.
+    assert.equal(
+      await processIdentityGone(identity, async () => {
+        throw new Error('query failed');
+      }),
+      false
+    );
   } finally {
+    child.kill();
     await rm(directory, { recursive: true, force: true });
   }
 });

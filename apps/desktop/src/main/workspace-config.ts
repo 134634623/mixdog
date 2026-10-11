@@ -5,6 +5,7 @@ import type { DesktopWorkspace, DesktopWorkspaceFolder } from '../shared/contrac
 import type { DesktopEditorSettings } from '../shared/contract';
 import { editorLanguageIdForPath } from '../shared/editor-languages';
 import { DEFAULT_DESKTOP_EDITOR_SETTINGS } from '../shared/editor-settings';
+import { applyEdits, modify } from 'jsonc-parser';
 import { objectRecord, parseJsonc, readJsoncFile } from './workflow-config';
 
 const MAX_WORKSPACE_FOLDERS = 64;
@@ -140,6 +141,10 @@ function inlayHintsSetting(value: unknown): DesktopEditorSettings['inlayHintsEna
   return 'on';
 }
 
+function markdownDefaultViewSetting(value: unknown): DesktopEditorSettings['markdownDefaultView'] {
+  return value === 'rich' || value === 'source' ? value : 'preview';
+}
+
 function editorSettingsFromScopes(scopes: readonly unknown[], languageId = 'plaintext'): DesktopEditorSettings {
   const merged = scopes.reduce<Record<string, unknown>>((current, scope) => {
     const record = objectRecord(scope);
@@ -178,6 +183,7 @@ function editorSettingsFromScopes(scopes: readonly unknown[], languageId = 'plai
     formatOnSave: booleanSetting(setting(merged, 'editor.formatOnSave'), defaults.formatOnSave),
     formatOnPaste: booleanSetting(setting(merged, 'editor.formatOnPaste'), defaults.formatOnPaste),
     formatOnType: booleanSetting(setting(merged, 'editor.formatOnType'), defaults.formatOnType),
+    markdownDefaultView: markdownDefaultViewSetting(setting(merged, 'mixdog.markdown.defaultView')),
     tabSize: Math.round(finiteNumber(setting(merged, 'editor.tabSize'), defaults.tabSize, 1, 16)),
     insertSpaces: booleanSetting(setting(merged, 'editor.insertSpaces'), defaults.insertSpaces),
     detectIndentation: booleanSetting(setting(merged, 'editor.detectIndentation'), defaults.detectIndentation),
@@ -193,6 +199,42 @@ async function optionalJsonc(path: string): Promise<Record<string, unknown>> {
   }
 }
 
+const MARKDOWN_DEFAULT_VIEW_KEY = 'mixdog.markdown.defaultView';
+
+function userSettingsFile(userDataPath: string): string {
+  return join(userDataPath, 'User', 'settings.json');
+}
+
+/** The user-scope Markdown default view (what Settings → General shows),
+ *  resolved by the same logic the editor uses. */
+export async function readMarkdownDefaultView(userDataPath: string): Promise<DesktopEditorSettings['markdownDefaultView']> {
+  const user = userDataPath ? await optionalJsonc(userSettingsFile(userDataPath)) : {};
+  return editorSettingsFromScopes([user]).markdownDefaultView;
+}
+
+/** Writes the user-scope setting into settings.json as a structural edit, so
+ *  comments and formatting stay as written. An unparsable file is left alone. */
+export async function writeMarkdownDefaultView(
+  userDataPath: string,
+  view: DesktopEditorSettings['markdownDefaultView']
+): Promise<DesktopEditorSettings['markdownDefaultView']> {
+  const next = markdownDefaultViewSetting(view);
+  const file = userSettingsFile(userDataPath);
+  let source = '';
+  try {
+    source = await readFile(file, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
+  }
+  if (!source.trim()) source = '{}';
+  if (!objectRecord(parseJsonc(source))) throw new TypeError('User settings must be an object.');
+  const edits = modify(source, [MARKDOWN_DEFAULT_VIEW_KEY], next, {
+    formattingOptions: { insertSpaces: true, tabSize: 2 },
+  });
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, applyEdits(source, edits), 'utf8');
+  return next;
+}
 export async function readScopedEditorSettings(
   userDataPath: string,
   folderPath: string,

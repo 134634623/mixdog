@@ -184,9 +184,16 @@ export function useComposerDictation({
     };
     refresh();
     window.addEventListener('mixdog:voice-runtime-changed', refresh);
+    // Remote clients: a probe made while the connection was down (or still
+    // syncing) fails and would hide the mic until a reload. Re-probe every
+    // time the connection becomes ready. Same value as
+    // REMOTE_CONNECTION_READY_EVENT (remote-shim-state), not imported so the
+    // desktop composer does not pull the remote shim in.
+    window.addEventListener('mixdog:remote-connection-ready', refresh);
     return () => {
       live = false;
       window.removeEventListener('mixdog:voice-runtime-changed', refresh);
+      window.removeEventListener('mixdog:remote-connection-ready', refresh);
     };
   }, []);
   const dictationSession = useRef<{

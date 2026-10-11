@@ -41,7 +41,7 @@ interface PendingInputSnapshot {
  *  user is its Goal: a blocked Goal, or tasks parked `awaiting_approval` (the
  *  user's own action) once the turn has gone idle. Returns an identity for the
  *  wait, or null when nothing is waiting. */
-export function pendingInputKey(snapshot: PendingInputSnapshot | null | undefined): string | null {
+function pendingInputKey(snapshot: PendingInputSnapshot | null | undefined): string | null {
   const goal = snapshot?.goal;
   if (!goal) return null;
   const goalId = String(goal.id ?? 'goal');

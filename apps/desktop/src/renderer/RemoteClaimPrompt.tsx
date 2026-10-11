@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { DesktopRemoteClientClaim } from '../shared/contract';
-import { t } from './i18n';
+import { t, uiFormatLocale } from './i18n';
 import { ErrorNotice } from './ErrorNotice';
 import { enqueueRemoteClientClaim, normalizeRemoteClientClaim, pruneRemoteClientClaims } from './remote-claim-queue';
 import { isRemoteClaimPromptActive, subscribeRemoteClaimPromptActive } from './remote-claim-prompt-state';
@@ -131,8 +131,29 @@ export function RemoteClaimPrompt() {
           <h3 id="remote-claim-title">{t('Connect {{device}}?', { device })}</h3>
         </header>
         <p id="remote-claim-description">
-          {t('It is asking to use this desktop. Approve it only if you just opened Mixdog there.')}
+          {t(
+            'Approving gives this device the same access as this PC. Approve it only if you just opened Mixdog there.'
+          )}
         </p>
+        <dl className="remote-claim-details">
+          <div>
+            <dt>{t('Device name')}</dt>
+            <dd>{device}</dd>
+          </div>
+          <div>
+            <dt>{t('Method')}</dt>
+            <dd>{claim.method === 'code' ? t('6-digit code') : t('QR code')}</dd>
+          </div>
+          <div>
+            <dt>{t('Requested')}</dt>
+            <dd>
+              {new Date(claim.requestedAt ?? Date.now()).toLocaleTimeString(uiFormatLocale(), {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </dd>
+          </div>
+        </dl>
         {claim.desktop && (
           <p className="remote-claim-desktop" role="note">
             {t('This is another Mixdog desktop app, connecting as a remote window.')}

@@ -16,6 +16,8 @@
         <item name="android:windowBackground">@color/mixdogBand</item>
         <item name="android:statusBarColor">@color/mixdogBand</item>
         <item name="android:navigationBarColor">@color/mixdogBand</item>
+        <!-- Light status bar icons on the dark band behind the status bar / camera cutout. -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 

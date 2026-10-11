@@ -1,6 +1,8 @@
 // Relay client for the installable web app: the desktop dials OUT to
 // apps/relay/server.mjs and answers browser RPC frames, so a phone anywhere
 // on the internet reaches this machine without port forwarding.
+import { hostname } from 'node:os';
+
 import WebSocket from 'ws';
 
 import type {
@@ -42,6 +44,7 @@ import { createRelayCatalogs } from './remote-relay-catalog';
 import { createRelayClientCallDispatch } from './remote-relay-client-calls';
 import { createRelayClientRegistry, type RelayClientState } from './remote-relay-clients';
 import { createRelayControlRequests } from './remote-relay-control';
+import { createPairCodeManager, type PairCodeState } from './remote-pair-code';
 import { createRelayEnvelopeDispatcher } from './remote-relay-envelope';
 import {
   createRevocationDrain,
@@ -104,6 +107,10 @@ export interface RemoteRelayHandle {
   publishBrowserTabs(tabs: DesktopRemoteBrowserTab[]): void;
   publishBrowserImportProgress(progress: DesktopBrowserImportProgress): void;
   listClients(): Promise<DesktopRemoteClientInfo[]>;
+  /** The 6-digit pairing code of an open Settings → Connection screen:
+   *  'ensure' returns the live one (minting if needed), 'renew' replaces it,
+   *  'release' withdraws it. */
+  pairCode(action: 'ensure' | 'renew' | 'release'): PairCodeState | null;
   revokeClient(clientId: string): Promise<void>;
   /** System resume: the socket is likely half-dead after sleep — drop it and
    *  redial immediately instead of waiting for the ping cycle to notice. */
@@ -117,7 +124,12 @@ export interface RemoteRelayHandle {
  *  detect a half-dead socket so the reconnect loop restores it long before a
  *  phone RPC would hang on it. Any traffic counts as proof of life, so a busy
  *  leg is never terminated for missing a pong. */
-function startRelayHeartbeat(ws: WebSocket): { markAlive(): void; stop(): void } {
+const RELAY_HEARTBEAT_MS = 10_000;
+
+export function startRelayHeartbeat(
+  ws: WebSocket,
+  intervalMs = RELAY_HEARTBEAT_MS
+): { markAlive(): void; stop(): void } {
   let alive = true;
   ws.on('pong', () => {
     alive = true;
@@ -138,7 +150,7 @@ function startRelayHeartbeat(ws: WebSocket): { markAlive(): void; stop(): void }
     } catch {
       /* close handler reconnects */
     }
-  }, 25_000);
+  }, intervalMs);
   heartbeat.unref?.();
   return {
     markAlive(): void {
@@ -271,6 +283,10 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
   // MIXDOG_REMOTE_METER=0 opts out.
   const relayByteMeter = createRemoteByteMeter({
     enabled: process.env.MIXDOG_REMOTE_METER !== '0',
+  });
+  const pairCode = createPairCodeManager({
+    sendEnvelope: (payload) => sendEnvelope(payload),
+    hostName: hostname().slice(0, 80),
   });
   const sendEnvelope = (payload: unknown): void => {
     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -618,6 +634,10 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
     control,
     onCapabilities: handleRelayCapabilities,
     onClientClaim: clientLifecycle.answerClaim,
+    onPairCode: (envelope) => {
+      if (envelope.type === 'pair-code-used') pairCode.onUsed();
+      else pairCode.onAck(envelope.ok === true);
+    },
     onClientOpen: clientLifecycle.open,
     onNativePushResult: handleNativePushResult,
     onClientClose: (clientId) => {
@@ -733,13 +753,19 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
       // and reset on attach and redial) instead of assuming a constant. Sent
       // from the open handler, so a redial re-declares it before any frame.
       // `textFrames` opts into the envelope that cannot inflate what it carries.
+      // `pairV2`: this desktop publishes 6-digit codes and serves browsers that
+      // connect directly. An older relay ignores the field.
       sendEnvelope({
         type: 'desktop-lanes',
         media: true,
         e2ee: 1,
         maxPayloadBytes: MAX_WS_PAYLOAD_BYTES,
         textFrames: 1,
+        pairV2: 1,
       });
+      sendEnvelope({ type: 'desktop-name', name: hostname().slice(0, 80) });
+      // A fresh leg knows nothing of the code the open screen is showing.
+      pairCode.resend();
       // Which build this desktop is, so the relay can serve its browsers the
       // matching renderer release. A separate frame (not a desktop-lanes field)
       // and ignored by relays that predate it.
@@ -801,6 +827,13 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
     pairing,
     get clientCount() {
       return clients.size;
+    },
+    pairCode: (action) => {
+      if (action === 'release') {
+        pairCode.release();
+        return null;
+      }
+      return pairCode.ensure(action === 'renew');
     },
     listClients: () =>
       control

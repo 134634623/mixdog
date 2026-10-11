@@ -1289,6 +1289,37 @@ for (const [pipeline, render] of Object.entries(streamingRenderers)) {
     }
   });
 
+  test(`${pipeline}: a parenthesised bare URL before Korean prose keeps prose and inline code outside the link`, async (t) => {
+    const release = 'https://github.com/tribgames/mixdog/releases/tag/untagged-3c4969055a3702501c68';
+    const f = await mount(t, render, 'See https://example.com/docs');
+    for (const [source, href, caption, text] of [
+      [
+        `1. **폴드7:** 초안 릴리스(${release})에서 \`Mixdog-0.1.3.apk\`를 받아 설치합니다.`,
+        release,
+        release,
+        `폴드7: 초안 릴리스(${release})에서 Mixdog-0.1.3.apk를 받아 설치합니다.`,
+      ],
+      ['페이지(https://a.io/x)와', 'https://a.io/x', 'https://a.io/x', '페이지(https://a.io/x)와'],
+      ['https://a.io/x에서', 'https://a.io/x', 'https://a.io/x', 'https://a.io/x에서'],
+      ['(https://a.io/x)', 'https://a.io/x', 'https://a.io/x', '(https://a.io/x)'],
+      [
+        'https://en.wikipedia.org/wiki/Foo_(bar)',
+        'https://en.wikipedia.org/wiki/Foo_(bar)',
+        'https://en.wikipedia.org/wiki/Foo_(bar)',
+        'https://en.wikipedia.org/wiki/Foo_(bar)',
+      ],
+      ['[label](https://a.io/x)에서', 'https://a.io/x', 'label', 'label에서'],
+    ]) {
+      await f.update(PROJECT, source);
+      const links = f.links();
+      assert.equal(links.length, 1, source);
+      assert.equal(links[0].getAttribute('href'), href, source);
+      assert.equal(readableText(links[0]), caption, source);
+      assert.equal(links[0].querySelector('code'), null, source);
+      assert.equal(readableText(f.dom.window.document.querySelector('p, li')), text, source);
+    }
+  });
+
   test(`${pipeline}: streamed link captions never flash brackets or a partial destination`, async (t) => {
     const f = await mount(t, render, 'See [do');
     for (const [source, caption, href] of [
