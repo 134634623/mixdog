@@ -6,6 +6,7 @@ import { skillDisplayDescription } from '../skill-presentation';
 import { showDesktopToast } from '../notifications';
 import { record } from '../record-utils';
 import { useRemoteHostOpenAccess } from '../remote-host-access';
+import { ScmContextMenu, type ScmContextMenuState } from '../ScmContextMenu';
 import { SidebarLoadingDialog } from '../sidebar-dialog';
 import { BuiltInFeaturesPanel } from './built-in-features-panel';
 import { PluginInfo } from './plugin-info';
@@ -148,6 +149,39 @@ export function McpPanel({ api, data, pending, run, confirm, createOpen, closeCr
     );
   };
   const closeEditor = () => setEditor(null);
+  const confirmRemove = (name: string) =>
+    confirm({
+      title: t('Remove MCP server?'),
+      description: t('{{name}} will be removed from Mixdog.', { name }),
+      confirmLabel: t('Remove'),
+      danger: true,
+      onConfirm: () => {
+        setEditor((current) => (current?.name === name ? null : current));
+        void run('removeMcpServer', [name]);
+      },
+    });
+  const [menu, setMenu] = useState<ScmContextMenuState | null>(null);
+  // Items run after the menu closes and returns focus to the row.
+  const openMenu = (name: string, enabled: boolean, point: { x: number; y: number }) =>
+    setMenu({
+      label: name,
+      ...point,
+      items: [
+        { id: 'edit', label: t('Edit'), onSelect: () => window.setTimeout(() => openEditor(name), 0) },
+        {
+          id: 'toggle',
+          label: enabled ? t('Disable') : t('Enable'),
+          onSelect: () => void run('setMcpServerEnabled', [name, !enabled]),
+        },
+        {
+          id: 'remove',
+          label: t('Remove'),
+          danger: true,
+          separatorBefore: true,
+          onSelect: () => window.setTimeout(() => confirmRemove(name), 0),
+        },
+      ],
+    });
   // Secrets in MCP configs never travel over remote access: the editor cannot
   // open or save there, so the add flow and rows are replaced by a note.
   // A host with open access gets the editor; the subscription re-renders it
@@ -191,9 +225,11 @@ export function McpPanel({ api, data, pending, run, confirm, createOpen, closeCr
             enabled={enabled}
             busy={busy || mcpLocked}
             onOpen={() => openEditor(name)}
+            onMenu={(point) => openMenu(name, enabled, point)}
           />
         );
       })}
+      <ScmContextMenu state={menu} onClose={() => setMenu(null)} />
       {editor && !openServer && (
         <SidebarLoadingDialog
           title={openName}
@@ -226,19 +262,7 @@ export function McpPanel({ api, data, pending, run, confirm, createOpen, closeCr
             const enabled = openServer.enabled !== false;
             void run('setMcpServerEnabled', [openName, !enabled]);
           }}
-          onRemove={() =>
-            confirm({
-              title: t('Remove MCP server?'),
-              description: t('{{name}} will be removed from Mixdog.', { name: openName }),
-              confirmLabel: t('Remove'),
-              danger: true,
-              onConfirm: () => {
-                const name = openName;
-                closeEditor();
-                void run('removeMcpServer', [name]);
-              },
-            })
-          }
+          onRemove={() => confirmRemove(openName)}
         />
       )}
     </Group>
@@ -266,6 +290,16 @@ function SkillsPanel({ api, data, pending, run, createOpen, closeCreate }: Panel
       });
     });
   };
+  const [menu, setMenu] = useState<ScmContextMenuState | null>(null);
+  const openMenu = (name: string, off: boolean, point: { x: number; y: number }) =>
+    setMenu({
+      label: name,
+      ...point,
+      items: [
+        { id: 'open', label: t('Open'), onSelect: () => window.setTimeout(() => openDetail(name), 0) },
+        { id: 'toggle', label: off ? t('Enable') : t('Disable'), onSelect: () => toggle(name) },
+      ],
+    });
   const save = async (payload: RecordValue) => {
     const capability = detail ? 'saveSkill' : 'addSkill';
     const value = await run<RecordValue>(capability, [payload]);
@@ -304,9 +338,11 @@ function SkillsPanel({ api, data, pending, run, createOpen, closeCreate }: Panel
             status={off ? { label: t('Disabled'), tone: 'muted' } : null}
             busy={busy}
             onOpen={() => openDetail(name)}
+            onMenu={(point) => openMenu(name, off, point)}
           />
         );
       })}
+      <ScmContextMenu state={menu} onClose={() => setMenu(null)} />
       {detail && open && detail.content === null && (
         <SidebarLoadingDialog
           title={detail.name}
@@ -357,6 +393,23 @@ function pluginMcpServers(data: PanelContext['data'], plugin: RecordValue): Reco
   );
 }
 
+function confirmPluginRemoval(
+  { confirm, run }: Pick<PanelContext, 'confirm' | 'run'>,
+  plugin: RecordValue,
+  onRemoved: () => void
+) {
+  confirm({
+    title: t('Remove plugin?'),
+    description: t('{{name}} will be removed from Mixdog.', { name: label(plugin) }),
+    confirmLabel: t('Remove'),
+    danger: true,
+    onConfirm: () => {
+      onRemoved();
+      void run('removePlugin', [plugin]);
+    },
+  });
+}
+
 function PluginDetailDialog({
   plugin: open,
   api,
@@ -402,18 +455,7 @@ function PluginDetailDialog({
             type="button"
             className="danger"
             disabled={busy}
-            onClick={() =>
-              confirm({
-                title: t('Remove plugin?'),
-                description: t('{{name}} will be removed from Mixdog.', { name: label(open) }),
-                confirmLabel: t('Remove'),
-                danger: true,
-                onConfirm: () => {
-                  onClose();
-                  void run('removePlugin', [open]);
-                },
-              })
-            }
+            onClick={() => confirmPluginRemoval({ confirm, run }, open, onClose)}
           >
             {t('Remove')}
           </button>
@@ -531,6 +573,38 @@ function PluginsPanel({ api, data, pending, run, confirm, createOpen, closeCreat
   const busy = Boolean(pending);
   const [openId, setOpenId] = useState('');
   const open = openId ? plugins.find((plugin) => String(plugin.id || plugin.name) === openId) : undefined;
+  const [menu, setMenu] = useState<ScmContextMenuState | null>(null);
+  const openMenu = (plugin: RecordValue, point: { x: number; y: number }) => {
+    const id = String(plugin.id || plugin.name);
+    const enabled = plugin.enabled !== false;
+    setMenu({
+      label: label(plugin),
+      ...point,
+      items: [
+        { id: 'details', label: t('Details'), onSelect: () => window.setTimeout(() => setOpenId(id), 0) },
+        {
+          id: 'toggle',
+          label: enabled ? t('Disable') : t('Enable'),
+          onSelect: () => void run('setPluginEnabled', [plugin, !enabled]),
+        },
+        { id: 'update', label: t('Update'), onSelect: () => void run('updatePlugin', [plugin]) },
+        {
+          id: 'remove',
+          label: t('Remove'),
+          danger: true,
+          separatorBefore: true,
+          onSelect: () =>
+            window.setTimeout(
+              () =>
+                confirmPluginRemoval({ confirm, run }, plugin, () =>
+                  setOpenId((current) => (current === id ? '' : current))
+                ),
+              0
+            ),
+        },
+      ],
+    });
+  };
   return (
     <Group title={t('Plugins')}>
       {skillToolsDialog}
@@ -563,9 +637,11 @@ function PluginsPanel({ api, data, pending, run, confirm, createOpen, closeCreat
             enabled={enabled}
             busy={busy}
             onOpen={() => setOpenId(id)}
+            onMenu={(point) => openMenu(plugin, point)}
           />
         );
       })}
+      <ScmContextMenu state={menu} onClose={() => setMenu(null)} />
       {open && (
         <PluginDetailDialog
           plugin={open}

@@ -31,7 +31,7 @@ jobs:
     env:
       RELAY_ORIGIN: https://192-255-139-161.sslip.io:8443
       PAIR_LINK: https://192-255-139-161.sslip.io:8443/d/fe94eef0-dbba-4b8d-a685-1c3aef6387da/
-      APPROVAL_WAIT_SECONDS: "420"
+      APPROVAL_WAIT_SECONDS: "240"
     steps:
       - uses: actions/checkout@v4
 

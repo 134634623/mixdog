@@ -67,6 +67,22 @@ export function isContextMenuKey(event: { key: string; shiftKey: boolean }): boo
   return event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey);
 }
 
+/** Row handlers that open a context menu: at the pointer on right-click, under
+ *  the row on Menu / Shift+F10. */
+export function contextMenuRowProps(open: (point: { x: number; y: number }) => void) {
+  return {
+    onContextMenu(event: React.MouseEvent<HTMLElement>) {
+      event.preventDefault();
+      open(pointerMenuPoint(event));
+    },
+    onKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+      if (!isContextMenuKey(event)) return;
+      event.preventDefault();
+      open(elementMenuPoint(event.currentTarget));
+    },
+  };
+}
+
 export function ScmContextMenu({
   state,
   onClose,
