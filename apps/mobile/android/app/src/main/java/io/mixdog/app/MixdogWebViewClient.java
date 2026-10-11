@@ -2,8 +2,12 @@ package io.mixdog.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import java.io.ByteArrayInputStream;
+import java.util.HashMap;
 import android.webkit.WebView;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeWebViewClient;
@@ -42,5 +46,28 @@ public class MixdogWebViewClient extends BridgeWebViewClient {
   @Override
   public boolean shouldOverrideUrlLoading(WebView view, String url) {
     return block(view, Uri.parse(url));
+  }
+
+  // shouldOverrideUrlLoading is not called for POST navigations (nor reliably
+  // for every redirect hop), so main-frame requests are also refused here.
+  @Override
+  public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+    if (request.isForMainFrame()
+        && !NavigationPolicy.allowMainFrame(
+            request.getUrl().toString(), MixdogOrigins.saved(view.getContext()))) {
+      return new WebResourceResponse(
+          "text/plain", "utf-8", 403, "Blocked", new HashMap<String, String>(), new ByteArrayInputStream(new byte[0]));
+    }
+    return super.shouldInterceptRequest(view, request);
+  }
+
+  // Last line: whatever URL the page actually started on after redirects.
+  @Override
+  public void onPageStarted(WebView view, String url, Bitmap favicon) {
+    if (url != null && !"about:blank".equals(url) && !NavigationPolicy.allowMainFrame(url, MixdogOrigins.saved(view.getContext()))) {
+      view.stopLoading();
+      return;
+    }
+    super.onPageStarted(view, url, favicon);
   }
 }

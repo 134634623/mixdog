@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createPairCodeManager, PAIR_CODE_TTL_MS } from './remote-pair-code.ts';
+import { createPairCodeManager, PAIR_CODE_REQUEST_TIMEOUT_MS, PAIR_CODE_TTL_MS } from './remote-pair-code.ts';
 import {
   fetchHostPresence,
   parsePairCodeInput,
@@ -10,37 +10,62 @@ import {
   remoteHostId,
 } from './remote-hosts.ts';
 
-const setup = (codes = ['111111', '222222', '333333']) => {
+const setup = ({ connected = true } = {}) => {
   const sent = [];
   const clock = { now: 1_000 };
-  const queue = [...codes];
+  let leases = 0;
+  const link = { connected };
   const manager = createPairCodeManager({
-    sendEnvelope: (frame) => sent.push(frame),
+    sendEnvelope: (frame) => {
+      if (!link.connected) return false;
+      sent.push(frame);
+      return true;
+    },
     hostName: 'Home PC',
     now: () => clock.now,
-    randomCode: () => queue.shift() ?? '999999',
+    newLease: () => `lease-${(leases += 1)}`,
   });
-  return { manager, sent, clock };
+  const issue = (lease, code, expiresInMs = PAIR_CODE_TTL_MS) =>
+    manager.onIssued({ type: 'pair-code-issued', lease, ok: true, code, expiresInMs });
+  return { manager, sent, clock, issue, link };
 };
 
-test('a code is minted on first ask, published once, and reused until it expires', () => {
-  const { manager, sent, clock } = setup();
+test('no code is shown until the relay issues one, and the lease expiry is not extended', () => {
+  const { manager, sent, clock, issue } = setup();
+  assert.equal(manager.ensure(), null);
+  assert.deepEqual(sent, [{ type: 'pair-code-request', lease: 'lease-1', name: 'Home PC' }]);
+  assert.equal(manager.ensure(), null);
+  assert.equal(sent.length, 1, 'one outstanding request');
+  issue('lease-1', '111111');
   const first = manager.ensure();
-  assert.equal(first.code, '111111');
-  assert.equal(first.expiresAt, 1_000 + PAIR_CODE_TTL_MS);
-  assert.deepEqual(sent, [{ type: 'pair-code', code: '111111', name: 'Home PC' }]);
-  assert.equal(manager.ensure().code, '111111');
-  assert.equal(sent.length, 1);
-  clock.now += PAIR_CODE_TTL_MS + 1;
-  assert.equal(manager.ensure().code, '222222');
+  assert.deepEqual(first, { code: '111111', expiresAt: 1_000 + PAIR_CODE_TTL_MS });
+  clock.now += 10_000;
+  assert.equal(manager.ensure().expiresAt, 1_000 + PAIR_CODE_TTL_MS);
+  clock.now += PAIR_CODE_TTL_MS;
+  assert.equal(manager.ensure(), null);
+  assert.equal(sent.at(-1).lease, 'lease-2');
 });
 
-test('renew replaces the code; release withdraws it; used makes the next ask mint', () => {
-  const { manager, sent } = setup();
+test('an issue answer for another lease is ignored', () => {
+  const { manager, issue } = setup();
   manager.ensure();
-  assert.equal(manager.ensure(true).code, '222222');
-  manager.onUsed();
-  assert.equal(manager.ensure().code, '333333');
+  issue('lease-other', '222222');
+  assert.equal(manager.ensure(), null);
+});
+
+test('renew asks for a new code; used spends only its own lease; release withdraws', () => {
+  const { manager, sent, issue } = setup();
+  manager.ensure();
+  issue('lease-1', '111111');
+  assert.equal(manager.ensure(true), null);
+  assert.equal(sent.at(-1).lease, 'lease-2');
+  issue('lease-2', '222222');
+  manager.onUsed({ type: 'pair-code-used', lease: 'lease-1' });
+  assert.equal(manager.ensure().code, '222222', 'a stale used notice spends nothing');
+  manager.onUsed({ type: 'pair-code-used', lease: 'lease-2' });
+  assert.equal(manager.ensure(), null);
+  assert.equal(sent.at(-1).lease, 'lease-3');
+  issue('lease-3', '333333');
   manager.release();
   assert.deepEqual(sent.at(-1), { type: 'pair-code-clear' });
   const count = sent.length;
@@ -48,17 +73,46 @@ test('renew replaces the code; release withdraws it; used makes the next ask min
   assert.equal(sent.length, count, 'releasing nothing sends nothing');
 });
 
-test('a collision answer draws a fresh code while the screen is open, and a new relay leg republishes', () => {
-  const { manager, sent } = setup();
+test('a reconnect never republishes the old code: it requests a fresh one', () => {
+  const { manager, sent, issue } = setup();
   manager.ensure();
-  manager.onAck(false);
-  assert.equal(sent.at(-1).code, '222222');
-  manager.onAck(true);
-  manager.resend();
-  assert.equal(sent.at(-1).code, '222222');
+  issue('lease-1', '111111');
+  manager.onConnected();
+  assert.deepEqual(sent.at(-1), { type: 'pair-code-request', lease: 'lease-2', name: 'Home PC' });
+  assert.equal(sent.filter((frame) => frame.code).length, 0);
+  assert.equal(manager.ensure(), null, 'the old code is not shown while the new one is pending');
+  issue('lease-1', '111111');
+  assert.equal(manager.ensure(), null, 'a late answer for the old lease is ignored');
+  issue('lease-2', '444444');
+  assert.equal(manager.ensure().code, '444444');
   manager.release();
-  manager.onAck(false);
-  assert.equal(sent.at(-1).type, 'pair-code-clear', 'a closed screen does not redraw');
+  const count = sent.length;
+  manager.onConnected();
+  assert.equal(sent.length, count, 'a closed screen requests nothing on connect');
+});
+
+test('an unanswered or refused request reports unsupported instead of a code, until the next connection', () => {
+  const { manager, clock, issue } = setup();
+  assert.equal(manager.ensure(), null);
+  clock.now += PAIR_CODE_REQUEST_TIMEOUT_MS + 1;
+  assert.deepEqual(manager.ensure(), { unsupported: true });
+  assert.deepEqual(manager.ensure(true), { unsupported: true });
+  manager.onConnected();
+  assert.equal(manager.ensure(), null);
+  manager.onIssued({ type: 'pair-code-issued', lease: 'lease-2', ok: false });
+  assert.deepEqual(manager.ensure(), { unsupported: true });
+  issue('lease-2', '555555');
+  assert.deepEqual(manager.ensure(), { unsupported: true });
+});
+
+test('a request made while offline is not counted as unanswered', () => {
+  const { manager, clock, link, sent } = setup({ connected: false });
+  assert.equal(manager.ensure(), null);
+  clock.now += PAIR_CODE_REQUEST_TIMEOUT_MS * 3;
+  assert.equal(manager.ensure(), null);
+  link.connected = true;
+  assert.equal(manager.ensure(), null);
+  assert.equal(sent.length, 1);
 });
 
 test('codes are typed in any grouping and never contain anything but six digits', () => {

@@ -8,11 +8,14 @@ import android.content.Intent;
 import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import java.util.UUID;
 
 /** Local notifications built from a decrypted push payload. */
 final class MixdogNotifications {
   static final String CHANNEL_ID = "mixdog_sessions";
   static final String EXTRA_ACTION = "mx_action";
+  static final String EXTRA_ACTION_ID = "mx_action_id";
+  static final String EXTRA_HOST = "mx_host";
   static final String EXTRA_SESSION = "mx_session";
   static final String EXTRA_APPROVAL = "mx_approval";
   static final String EXTRA_NOTIFICATION_ID = "mx_notification_id";
@@ -29,21 +32,35 @@ final class MixdogNotifications {
   }
 
   private static PendingIntent open(
-      Context context, int notificationId, String action, String sessionId, String approvalId, int salt) {
+      Context context,
+      int notificationId,
+      String action,
+      String sessionId,
+      String approvalId,
+      String hostId,
+      int salt) {
     Intent intent =
         new Intent(context, MainActivity.class)
             .setAction("io.mixdog.app.NOTIFICATION_" + action + "_" + notificationId)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra(EXTRA_ACTION, action)
+            .putExtra(EXTRA_ACTION_ID, UUID.randomUUID().toString())
             .putExtra(EXTRA_SESSION, sessionId)
             .putExtra(EXTRA_NOTIFICATION_ID, notificationId);
+    if (hostId != null && !hostId.isEmpty()) intent.putExtra(EXTRA_HOST, hostId);
     if (approvalId != null && !approvalId.isEmpty()) intent.putExtra(EXTRA_APPROVAL, approvalId);
     return PendingIntent.getActivity(
         context, notificationId * 3 + salt, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
   }
 
   static void show(
-      Context context, String title, String body, String sessionId, String reason, String approvalId) {
+      Context context,
+      String title,
+      String body,
+      String sessionId,
+      String reason,
+      String approvalId,
+      String hostId) {
     ensureChannel(context);
     // One notification per session: a newer one replaces the older.
     int id = sessionId.hashCode() & 0x3fffffff;
@@ -55,10 +72,10 @@ final class MixdogNotifications {
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setContentIntent(open(context, id, "open", sessionId, null, 0));
+            .setContentIntent(open(context, id, "open", sessionId, null, hostId, 0));
     if (REASON_APPROVAL.equals(reason) && approvalId != null && !approvalId.isEmpty()) {
-      builder.addAction(0, "Allow", open(context, id, "allow", sessionId, approvalId, 1));
-      builder.addAction(0, "Deny", open(context, id, "deny", sessionId, approvalId, 2));
+      builder.addAction(0, "Allow", open(context, id, "allow", sessionId, approvalId, hostId, 1));
+      builder.addAction(0, "Deny", open(context, id, "deny", sessionId, approvalId, hostId, 2));
     }
     try {
       NotificationManagerCompat.from(context).notify(id, builder.build());

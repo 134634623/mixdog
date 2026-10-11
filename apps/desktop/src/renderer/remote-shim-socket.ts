@@ -13,7 +13,7 @@ import {
   shouldRunRemoteHeartbeat,
   type RemoteConnectionIssue,
 } from './remote-connection-state';
-import { REMOTE_CONNECTION_READY_EVENT, PAIRED_STORAGE_KEY } from './remote-shim-state';
+import { REMOTE_CONNECTION_READY_EVENT } from './remote-shim-state';
 import type { RemoteShimContext } from './remote-shim-state';
 import { publishMediaKey, revokeMediaKey } from './remote-media-lane';
 
@@ -186,7 +186,9 @@ const openSocketAttempt = (
     if (!ctx.everPaired) {
       ctx.everPaired = true;
       try {
-        localStorage.setItem(PAIRED_STORAGE_KEY, '1');
+        // Sticky proof that this pairing has worked once: a browser reopened
+        // while the desktop sleeps must not throw the pairing screen over it.
+        localStorage.setItem(ctx.pairingKeys.paired, '1');
       } catch {
         /* no storage */
       }

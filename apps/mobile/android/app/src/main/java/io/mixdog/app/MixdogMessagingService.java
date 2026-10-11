@@ -39,10 +39,12 @@ public class MixdogMessagingService extends FirebaseMessagingService {
           content.getString("body"),
           content.getString("sessionId"),
           content.optString("reason", ""),
-          content.optString("approvalId", ""));
+          content.optString("approvalId", ""),
+          // Originating host (device id), set by the desktop inside the encrypted payload.
+          content.optString("hostId", ""));
     } catch (Exception e) {
       // Undecryptable (stale key after reinstall, tampering): say so without content.
-      MixdogNotifications.show(this, "Mixdog", "Open Mixdog to see new activity.", "mixdog-generic", "", "");
+      MixdogNotifications.show(this, "Mixdog", "Open Mixdog to see new activity.", "mixdog-generic", "", "", "");
     }
   }
 }

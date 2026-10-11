@@ -143,7 +143,8 @@
   height: 100%;
 }
 .editor-outline {
-  flex: 0 0 200px;
+  /* Narrow side panes keep most of the width for the document. */
+  flex: 0 0 clamp(120px, 30%, 200px);
   min-width: 0;
   overflow: auto;
   padding: 8px 0;

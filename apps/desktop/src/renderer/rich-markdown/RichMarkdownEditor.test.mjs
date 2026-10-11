@@ -82,7 +82,9 @@ async function mount(t, text, props = {}) {
   const doc = dom.window.document;
   const content = () => doc.querySelector('.rich-markdown-content');
   const editor = () => content().editor;
-  return { dom, doc, model, calls, render, content, editor, external };
+  /** Leaves Rich (another view mode takes its place). */
+  const leave = () => act(async () => root.render(null));
+  return { dom, doc, model, calls, render, leave, content, editor, external };
 }
 
 test('the document renders as rich content with real headings and a front matter banner, without writing', async (t) => {
@@ -119,6 +121,127 @@ test('a user edit is written back to the model as a minimal change', async (t) =
   assert.equal(f.model.getValue(), FRONT + BODY.replace('Some __bold__ text.', 'Some **bold** text now.'));
   assert.equal(f.model.edits.length, 1);
   assert.ok(f.model.edits[0].start > (FRONT + BODY).indexOf('* second'), 'untouched blocks are not rewritten');
+});
+
+test('a Rich edit reaches the model at once, so a change made elsewhere right after cannot lose it', async (t) => {
+  const f = await mount(t, '# Hello\n\nBody.\n');
+  await act(async () => {
+    f.editor().chain().insertContentAt(1, 'LOCAL ').run();
+  });
+  assert.equal(f.model.getValue(), '# LOCAL Hello\n\nBody.\n', 'no delay: the model and its dirty state have the edit');
+  // Source or another view edits the same model immediately afterwards.
+  await act(async () => {
+    f.model.pushEditOperations(
+      [],
+      [{ range: { startLineNumber: 3, startColumn: 1, endLineNumber: 3, endColumn: 1 }, text: 'External. ' }],
+      () => null
+    );
+  });
+  await f.render({ text: f.model.getValue() });
+  await settle(400);
+  assert.equal(f.model.getValue(), '# LOCAL Hello\n\nExternal. Body.\n');
+  assert.equal(f.content().querySelector('h1').textContent, 'LOCAL Hello');
+  assert.match(f.content().textContent, /External\. Body\./);
+});
+
+test('undo runs on the model history: across leaving Rich, from the keyboard, and from Source', async (t) => {
+  const f = await mount(t, BODY);
+  await act(async () => {
+    f.editor().chain().insertContentAt(1, 'My ').run();
+  });
+  const edited = f.model.getValue();
+  assert.match(edited, /^# My Guide\n/);
+  await f.leave();
+  await f.render();
+  await settle();
+  const button = (label) => f.doc.querySelector(`.rich-markdown-toolbar button[aria-label="${label}"]`);
+  assert.equal(button('Undo').disabled, false, 'the edit is still undoable after coming back');
+  await act(async () => button('Undo').click());
+  assert.equal(f.model.getValue(), BODY);
+  assert.equal(f.content().querySelector('h1').textContent, 'Guide');
+  assert.equal(button('Redo').disabled, false);
+  await act(async () => {
+    f.content().dispatchEvent(
+      new f.dom.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })
+    );
+  });
+  assert.equal(f.model.getValue(), edited);
+  assert.equal(f.content().querySelector('h1').textContent, 'My Guide');
+  // Ctrl+Z in Source undoes the same model.
+  await f.leave();
+  await act(async () => f.model.undo());
+  assert.equal(f.model.getValue(), BODY);
+  await f.render();
+  assert.equal(f.content().querySelector('h1').textContent, 'Guide');
+});
+
+test('undo and redo put the caret where the undone or redone edit was', async (t) => {
+  const f = await mount(t, 'First paragraph here.\n\nSecond paragraph, much longer than the first one.\n');
+  const editor = f.editor();
+  await act(async () => {
+    editor.chain().insertContentAt(7, 'NEW ').run();
+  });
+  assert.match(f.model.getValue(), /^First NEW paragraph/);
+  // The caret moves away, to the end of the second paragraph.
+  await act(async () => {
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  });
+  const history = (inputType) =>
+    act(async () => {
+      f.content().dispatchEvent(new f.dom.window.InputEvent('beforeinput', { inputType, bubbles: true, cancelable: true }));
+    });
+  await history('historyUndo');
+  assert.equal(f.model.getValue(), 'First paragraph here.\n\nSecond paragraph, much longer than the first one.\n');
+  assert.deepEqual([editor.state.selection.from, editor.state.selection.to], [7, 7]);
+  await history('historyRedo');
+  assert.match(f.model.getValue(), /^First NEW paragraph/);
+  assert.deepEqual([editor.state.selection.from, editor.state.selection.to], [11, 11]);
+});
+
+test('an edit the file cannot take yet stays in Rich with a notice; saving waits until it is discarded', async (t) => {
+  const original = '| A |\n| --- |\n| one |\n';
+  const held = [];
+  const f = await mount(t, original, { onHeldChange: (value) => held.push(value) });
+  const editor = f.editor();
+  let cellEnd = -1;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'tableCell') cellEnd = pos + node.nodeSize - 1;
+  });
+  // Two paragraphs in one cell: Markdown has no way to write that.
+  await act(async () => {
+    editor.chain().insertContentAt(cellEnd, { type: 'paragraph', content: [{ type: 'text', text: 'two' }] }).run();
+  });
+  const notice = () => f.doc.querySelector('.rich-markdown-held');
+  assert.ok(notice(), 'the notice shows at once');
+  assert.equal(notice().getAttribute('role'), 'alert');
+  assert.deepEqual(held, [true]);
+  assert.equal(f.model.getValue(), original);
+  assert.match(f.content().textContent, /two/, 'the edit is still in the editor');
+  await act(async () => {
+    f.content().dispatchEvent(new f.dom.window.KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true }));
+  });
+  assert.equal(f.calls.save, 0, 'saving would leave the edit out: it waits');
+  assert.deepEqual(f.calls.unsupported, []);
+  await act(async () => notice().querySelector('button').click());
+  assert.equal(notice(), null);
+  assert.deepEqual(held, [true, false]);
+  assert.doesNotMatch(f.content().textContent, /two/);
+  assert.equal(f.model.getValue(), original);
+});
+
+test('case-insensitive search reports document positions even when lowercasing changes length', async (t) => {
+  const { findRichMarkdownMatches } = await import('./rich-markdown-search.ts');
+  const f = await mount(t, 'İx and İX\n');
+  const doc = f.editor().state.doc;
+  assert.deepEqual(findRichMarkdownMatches(doc, 'x'), [
+    { from: 2, to: 3 },
+    { from: 9, to: 10 },
+  ]);
+  assert.deepEqual(findRichMarkdownMatches(doc, 'İx'), [
+    { from: 1, to: 3 },
+    { from: 8, to: 10 },
+  ]);
+  assert.equal(doc.textBetween(9, 10), 'X');
 });
 
 test('changes made in the model elsewhere re-sync the editor', async (t) => {

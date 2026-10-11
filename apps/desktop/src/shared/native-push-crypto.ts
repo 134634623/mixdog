@@ -26,6 +26,8 @@ export interface NativePushContent {
   sessionId: string;
   reason: NativePushReason;
   approvalId?: string;
+  /** Relay device id of the sending PC (the `/d/<deviceId>/` route). */
+  hostId?: string;
 }
 
 /** A device public key is a 65-byte uncompressed P-256 point that is on the curve. */

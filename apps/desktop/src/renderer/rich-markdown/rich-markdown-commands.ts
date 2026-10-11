@@ -6,6 +6,8 @@ export interface RichMarkdownBlockCommand {
   id: string;
   /** English label; rendered through t(). */
   label: string;
+  /** Values for `{{placeholders}}` in `label`. */
+  labelParams?: { level: number };
   keywords: string[];
   /** Runs after the typed `/query` has been removed. `prompt` opens the
    *  editor's input popover for commands that need a value. */
@@ -14,7 +16,8 @@ export interface RichMarkdownBlockCommand {
 
 const heading = (level: 1 | 2 | 3 | 4 | 5 | 6): RichMarkdownBlockCommand => ({
   id: `heading${level}`,
-  label: `Heading ${level}`,
+  label: 'Heading {{level}}',
+  labelParams: { level },
   keywords: ['heading', `h${level}`, 'title'],
   run: (editor) => editor.chain().focus().setHeading({ level }).run(),
 });
@@ -108,10 +111,18 @@ export const RICH_MARKDOWN_BLOCK_COMMANDS: RichMarkdownBlockCommand[] = [
 
 /** Commands matching a `/query`: label or keyword prefix first, then any
  *  substring match, each group in menu order. */
-export function filterBlockCommands(query: string, label: (english: string) => string = (text) => text) {
+export function filterBlockCommands(
+  query: string,
+  label: (english: string, params?: { level: number }) => string = (text, params) =>
+    params ? text.replace('{{level}}', String(params.level)) : text
+) {
   const needle = query.trim().toLowerCase();
   if (!needle) return RICH_MARKDOWN_BLOCK_COMMANDS;
-  const words = (command: RichMarkdownBlockCommand) => [label(command.label).toLowerCase(), command.label.toLowerCase(), ...command.keywords];
+  const words = (command: RichMarkdownBlockCommand) => [
+    label(command.label, command.labelParams).toLowerCase(),
+    ...(command.labelParams ? [`heading ${command.labelParams.level}`] : [command.label.toLowerCase()]),
+    ...command.keywords,
+  ];
   const prefix = RICH_MARKDOWN_BLOCK_COMMANDS.filter((command) =>
     words(command).some((word) => word.startsWith(needle) || word.split(/\s+/).some((part) => part.startsWith(needle)))
   );

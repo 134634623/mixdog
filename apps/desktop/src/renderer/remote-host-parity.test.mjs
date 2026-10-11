@@ -41,7 +41,9 @@ test('an old host (no remoteParity) keeps the pre-round behavior', async () => {
     assert.deepEqual({ ...(await api.getUpdaterState()) }, { status: 'disabled' });
     assert.deepEqual({ ...(await api.checkForDesktopUpdate()) }, { status: 'disabled' });
     assert.deepEqual({ ...(await api.showDesktopUpdate()) }, { status: 'disabled' });
-    api.subscribeUpdaterState(() => {})();
+    const unsubscribe = api.subscribeUpdaterState(() => {});
+    assert.equal(shim.ctx.updaterListeners.size, 1);
+    unsubscribe();
     assert.equal(shim.ctx.updaterListeners.size, 0);
     await assert.rejects(api.trashProjectEntry('/p', 'a.txt'), { message: OLD_TRASH });
     await api.browserReleasePage('page');
@@ -85,6 +87,21 @@ test('a new host (remoteParity) exposes the new members and retries submits with
     assert.equal(second.params[2].id, first.params[2].id);
     await leg.deliver({ id: second.id, ok: true, value: true });
     assert.equal(await submit, true);
+  });
+});
+
+test('an updater subscription made before the handshake survives it', async () => {
+  await withShim({}, async (shim) => {
+    shim.ctx.updaterListeners = new Set();
+    shim.ctx.settingsChangedListeners = new Set();
+    const api = createRemoteApi(shim.ctx);
+    const seen = [];
+    api.subscribeUpdaterState((state) => seen.push(state.status));
+    assert.equal(shim.ctx.peerRemoteParity, false);
+    await shim.dial({ remoteParity: true, ready: publishedCeilings(4096, 4096) });
+    assert.equal(shim.ctx.updaterListeners.size, 1);
+    shim.ctx.fanOut(shim.ctx.updaterListeners, { status: 'ready' });
+    assert.deepEqual(seen, ['ready']);
   });
 });
 

@@ -96,6 +96,37 @@ test('the pairing card shows the QR and a 6-digit code with no link field; the o
   assert.deepEqual(connected, ['482917']);
 });
 
+test('a pending code request (null) shows a loading state, not the unsupported note', async (t) => {
+  const { root, document } = installTestDom(t, { rootId: 'root' });
+  const api = {
+    getRemoteAccessInfo: () => Promise.resolve(readyInfo('ffffffff')),
+    getRemotePairCode: () => Promise.resolve(null),
+  };
+  setCachedConnectionInfo(api, readyInfo('ffffffff'));
+  await act(async () => root.render(React.createElement(ConnectionPanel, { api })));
+  assert.ok(document.body.textContent.includes('Getting a code…'));
+  assert.ok(!document.body.textContent.includes("doesn't support codes"));
+});
+
+for (const [label, answer] of [
+  ['{ unsupported: true }', { unsupported: true }],
+  ['a missing result', undefined],
+]) {
+  test(`a relay without codes (${label}) keeps the QR, hides the code and says so`, async (t) => {
+    const { root, document } = installTestDom(t, { rootId: 'root' });
+    const api = {
+      getRemoteAccessInfo: () => Promise.resolve(readyInfo('eeeeeeee')),
+      getRemotePairCode: () => Promise.resolve(answer),
+    };
+    setCachedConnectionInfo(api, readyInfo('eeeeeeee'));
+    await act(async () => root.render(React.createElement(ConnectionPanel, { api })));
+    assert.ok(document.querySelector('.settings-connection-card svg[data-device="eeeeeeee"]'));
+    assert.equal(document.querySelector('.settings-pair-code'), null);
+    assert.equal(document.querySelector('.settings-pair-timer'), null);
+    assert.ok(document.body.textContent.includes("This relay doesn't support codes yet — use the QR code"));
+  });
+}
+
 test('connected devices show a kind icon, an online pill, dates and unpair', async (t) => {
   const { root, document } = installTestDom(t, { rootId: 'root' });
   const info = {

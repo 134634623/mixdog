@@ -78,11 +78,20 @@ const TABLE_ACTIONS = [
 export function RichMarkdownToolbar({
   editor,
   readOnly,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   onPrompt,
   onSearch,
 }: {
   editor: Editor;
   readOnly: boolean;
+  /** Undo and redo run on the document's model history, not the editor's. */
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo(): void;
+  onRedo(): void;
   onPrompt(kind: RichMarkdownPromptKind): void;
   onSearch(): void;
 }) {
@@ -102,8 +111,6 @@ export function RichMarkdownToolbar({
       codeBlock: current.isActive('codeBlock'),
       table: current.isActive('table'),
       listItem: listItemType(current),
-      canUndo: current.can().undo(),
-      canRedo: current.can().redo(),
     }),
   });
   const chain = () => editor.chain().focus();
@@ -112,10 +119,10 @@ export function RichMarkdownToolbar({
   return (
     <div className="rich-markdown-toolbar" role="toolbar" aria-label={t('Formatting')}>
       <div className="rich-markdown-toolbar-group">
-        <ToolButton label={t('Undo')} shortcut={`${mod}Z`} disabled={off || !state.canUndo} onRun={() => chain().undo().run()}>
+        <ToolButton label={t('Undo')} shortcut={`${mod}Z`} disabled={off || !canUndo} onRun={onUndo}>
           <Undo2 {...ICON} />
         </ToolButton>
-        <ToolButton label={t('Redo')} shortcut={`${mod}Shift+Z`} disabled={off || !state.canRedo} onRun={() => chain().redo().run()}>
+        <ToolButton label={t('Redo')} shortcut={`${mod}Shift+Z`} disabled={off || !canRedo} onRun={onRedo}>
           <Redo2 {...ICON} />
         </ToolButton>
       </div>

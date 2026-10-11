@@ -272,6 +272,8 @@ function linkFromAppUrl(url: string): string {
   }
 }
 
+const LAUNCH_UPDATE_BUDGET_MS = 600;
+
 async function boot(): Promise<void> {
   applyStrings();
   await loadBook();
@@ -297,7 +299,15 @@ async function boot(): Promise<void> {
   let update: AvailableUpdate | null = null;
   if (Capacitor.getPlatform() === 'android') {
     const info = await App.getInfo();
-    update = await checkForUpdate(info.version);
+    // A launch that goes straight to the saved host (a notification Allow /
+    // Deny lands here too) must not sit behind a slow release lookup: it gets a
+    // short budget, and only the picker screen, which stays up anyway, waits
+    // the full timeout.
+    update = await checkForUpdate(
+      info.version,
+      undefined,
+      !manage && book.last ? LAUNCH_UPDATE_BUDGET_MS : undefined
+    );
     if (update) await offerUpdate(update);
   }
   const prompting = update !== null && !$('update').hidden;

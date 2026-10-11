@@ -156,10 +156,16 @@ function reportVersion({ store, deviceId }, message) {
 // The main PC publishes its current 6-digit code (only while Settings →
 // Connection is open) and withdraws it when that screen closes. The code is
 // never logged; the answer says only whether the relay accepted it.
-function registerPairCode({ pairCodes, deviceId, socket, sendJson }, message) {
+function requestPairCode({ pairCodes, deviceId, socket, sendJson }, message) {
   if (!pairCodes) return;
-  const result = pairCodes.register(deviceId, message.code, message.name);
-  sendJson(socket, { type: 'pair-code-ack', ok: result === 'ok' });
+  const result = pairCodes.issue(deviceId, message.lease, message.name);
+  const lease = typeof message.lease === 'string' ? message.lease.slice(0, 64) : '';
+  sendJson(
+    socket,
+    result.status === 'ok'
+      ? { type: 'pair-code-issued', lease, ok: true, code: result.code, expiresInMs: result.ttlMs }
+      : { type: 'pair-code-issued', lease, ok: false }
+  );
 }
 
 // The desktop's own name for itself, shown in the PC switcher of the remote
@@ -218,7 +224,7 @@ const DESKTOP_FRAME_HANDLERS = new Map([
   ['revoke-client', revokeClient],
   ['desktop-lanes', declareLanes],
   ['desktop-version', reportVersion],
-  ['pair-code', registerPairCode],
+  ['pair-code-request', requestPairCode],
   ['pair-code-clear', clearPairCode],
   ['desktop-name', reportName],
   ['native-push-bind', bindNativeToken],
@@ -322,7 +328,12 @@ export function runDesktopLeg(context, deviceId, socket) {
     'message',
     guarded('desktop frame', (raw, isBinary) => handleDesktopFrame(leg, liveDesktops, maxFrameBytes, raw, isBinary))
   );
-  socket.on('close', () => releaseDesktopLeg(liveDesktops, deviceId, entry, socket));
+  socket.on('close', () => {
+    // A closed live leg's code dies with it; a superseded leg must not clear
+    // the code its replacement just requested.
+    if (liveDesktops.get(deviceId)?.socket === socket) pairCodes?.clear(deviceId);
+    releaseDesktopLeg(liveDesktops, deviceId, entry, socket);
+  });
 }
 
 // One frame from the desktop. Bookkeeping first: a message that is not acted

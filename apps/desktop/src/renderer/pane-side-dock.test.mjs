@@ -1420,31 +1420,18 @@ test('side file: status lives in a second row; ⋯ holds only real actions', asy
   assert.match(css.match(/\.side-file-status-problems \{([^}]*)\}/)[1], /min-width: 52px;/);
 });
 
-test('side file second row hides language first, then the cursor; counts and the toggle stay', async () => {
+test('side file second row hides language first, then the cursor; counts stay', async () => {
   const L = await import('./side-file-status-layout.ts');
-  const base = (toggle) =>
-    L.SIDE_STATUS_PADDING +
-    L.SIDE_STATUS_PATH_MIN_WIDTH +
-    L.SIDE_STATUS_PROBLEMS_WIDTH +
-    (toggle ? L.SIDE_STATUS_TOGGLE_WIDTH : 0);
-  for (const toggle of [false, true]) {
-    assert.deepEqual(L.sideStatusLayout(500, toggle), { cursor: true, language: true });
-    assert.deepEqual(L.sideStatusLayout(280, false), { cursor: true, language: true });
-    assert.deepEqual(
-      L.sideStatusLayout(280, true),
-      { cursor: true, language: false },
-      'with the toggle the language yields at the 280px floor'
-    );
-    const full = base(toggle) + L.SIDE_STATUS_CURSOR_WIDTH + L.SIDE_STATUS_LANGUAGE_WIDTH;
-    assert.deepEqual(L.sideStatusLayout(full, toggle), { cursor: true, language: true });
-    assert.deepEqual(L.sideStatusLayout(full - 1, toggle), { cursor: true, language: false });
-    assert.deepEqual(L.sideStatusLayout(base(toggle) + L.SIDE_STATUS_CURSOR_WIDTH - 1, toggle), {
-      cursor: false,
-      language: false,
-    });
-  }
-  assert.deepEqual(L.sideStatusLayout(0, true), { cursor: true, language: true });
-  // The problems counts and toggle are rendered regardless of the layout flags.
+  const base = L.SIDE_STATUS_PADDING + L.SIDE_STATUS_PATH_MIN_WIDTH + L.SIDE_STATUS_PROBLEMS_WIDTH;
+  assert.deepEqual(L.sideStatusLayout(500), { cursor: true, language: true });
+  assert.deepEqual(L.sideStatusLayout(280), { cursor: true, language: true });
+  const full = base + L.SIDE_STATUS_CURSOR_WIDTH + L.SIDE_STATUS_LANGUAGE_WIDTH;
+  assert.deepEqual(L.sideStatusLayout(full), { cursor: true, language: true });
+  assert.deepEqual(L.sideStatusLayout(full - 1), { cursor: true, language: false });
+  assert.deepEqual(L.sideStatusLayout(base + L.SIDE_STATUS_CURSOR_WIDTH - 1), { cursor: false, language: false });
+  assert.deepEqual(L.sideStatusLayout(0), { cursor: true, language: true });
+  assert.equal(L.SIDE_STATUS_TOGGLE_WIDTH, undefined);
+  // The problems counts are rendered regardless of the layout flags.
   const { readFile } = await import('node:fs/promises');
   const row = await readFile(new URL('./side-file-status-row.tsx', import.meta.url), 'utf8');
   assert.doesNotMatch(row, /view-toggle|aria-pressed/);

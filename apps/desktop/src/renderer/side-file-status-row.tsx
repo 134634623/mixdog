@@ -28,7 +28,7 @@ export function SideFileStatusRow({ chrome }: { chrome: SideFileChrome | null })
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  const layout = sideStatusLayout(width, false);
+  const layout = sideStatusLayout(width);
   const problems = chrome?.editable ? chrome.problems : undefined;
   // Rendered table/markdown preview or the Rich editor: nothing
   // editor-related to report.

@@ -79,7 +79,12 @@ public class MainActivity extends BridgeActivity {
     String sessionId = intent.getStringExtra(MixdogNotifications.EXTRA_SESSION);
     if (action == null || sessionId == null || sessionId.isEmpty()) return;
     MixdogPushStore.addAction(
-        this, action, sessionId, intent.getStringExtra(MixdogNotifications.EXTRA_APPROVAL));
+        this,
+        intent.getStringExtra(MixdogNotifications.EXTRA_ACTION_ID),
+        action,
+        sessionId,
+        intent.getStringExtra(MixdogNotifications.EXTRA_APPROVAL),
+        intent.getStringExtra(MixdogNotifications.EXTRA_HOST));
     int notificationId = intent.getIntExtra(MixdogNotifications.EXTRA_NOTIFICATION_ID, 0);
     if (notificationId != 0) getSystemService(NotificationManager.class).cancel(notificationId);
     // Consumed: a rotation or recreate must not replay it.

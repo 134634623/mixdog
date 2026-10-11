@@ -246,6 +246,13 @@ final class MixdogNativeBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
             pushState { replyHandler($0, nil) }
         case "requestPush":
             requestPush { replyHandler($0, nil) }
+        case "peekPendingActions":
+            let args = body?["args"] as? [String: Any]
+            replyHandler(peekPendingActions(hostId: args?["hostId"] as? String ?? ""), nil)
+        case "ackPendingAction":
+            let args = body?["args"] as? [String: Any]
+            ackPendingAction(id: args?["id"] as? String ?? "")
+            replyHandler(true, nil)
         case "takePendingAction":
             replyHandler(takePendingAction() ?? NSNull(), nil)
         case "openHostPicker":
@@ -303,16 +310,46 @@ final class MixdogNativeBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
 
     // MARK: - Parked notification actions
 
-    private func park(action: String, sessionId: String, approvalId: String?) {
-        var queue = (UserDefaults.standard.array(forKey: Self.pendingKey) as? [[String: String]]) ?? []
-        var entry = ["action": action, "sessionId": sessionId]
+    private static let pendingTTL: TimeInterval = 6 * 60 * 60
+
+    /// Parked actions that have not expired; entries from older builds get an id and a timestamp.
+    private func loadQueue() -> [[String: String]] {
+        let now = Date().timeIntervalSince1970
+        let stored = (UserDefaults.standard.array(forKey: Self.pendingKey) as? [[String: String]]) ?? []
+        return stored.map { item -> [String: String] in
+            var entry = item
+            if entry["id"] == nil { entry["id"] = UUID().uuidString }
+            if entry["createdAt"] == nil { entry["createdAt"] = String(now) }
+            return entry
+        }.filter { now - (Double($0["createdAt"] ?? "") ?? 0) <= Self.pendingTTL }
+    }
+
+    private func park(id: String, action: String, sessionId: String, approvalId: String?, hostId: String?) {
+        var queue = loadQueue()
+        // A re-delivered response parks once.
+        guard !queue.contains(where: { $0["id"] == id }) else { return }
+        var entry = ["id": id, "action": action, "sessionId": sessionId,
+                     "createdAt": String(Date().timeIntervalSince1970)]
         if let approvalId, !approvalId.isEmpty { entry["approvalId"] = approvalId }
+        if let hostId, !hostId.isEmpty { entry["hostId"] = hostId }
         queue.append(entry)
         UserDefaults.standard.set(Array(queue.suffix(8)), forKey: Self.pendingKey)
     }
 
+    /// Actions the page connected to `hostId` may act on (its own and unbound ones); nothing is removed.
+    private func peekPendingActions(hostId: String) -> [[String: String]] {
+        let queue = loadQueue()
+        UserDefaults.standard.set(queue, forKey: Self.pendingKey)
+        return queue.filter { ($0["hostId"] ?? "").isEmpty || $0["hostId"] == hostId }
+    }
+
+    private func ackPendingAction(id: String) {
+        UserDefaults.standard.set(loadQueue().filter { $0["id"] != id }, forKey: Self.pendingKey)
+    }
+
+    /// Legacy (pre-ack web clients): oldest parked action, removed.
     private func takePendingAction() -> [String: String]? {
-        var queue = (UserDefaults.standard.array(forKey: Self.pendingKey) as? [[String: String]]) ?? []
+        var queue = loadQueue()
         guard !queue.isEmpty else { return nil }
         let first = queue.removeFirst()
         UserDefaults.standard.set(queue, forKey: Self.pendingKey)
@@ -342,7 +379,9 @@ final class MixdogNativeBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
             case "deny": action = "deny"
             default: action = "open"
             }
-            park(action: action, sessionId: sessionId, approvalId: info["mxApprovalId"] as? String)
+            park(id: response.notification.request.identifier + ":" + response.actionIdentifier,
+                 action: action, sessionId: sessionId,
+                 approvalId: info["mxApprovalId"] as? String, hostId: info["mxHostId"] as? String)
             notifyWeb()
         }
         completionHandler()

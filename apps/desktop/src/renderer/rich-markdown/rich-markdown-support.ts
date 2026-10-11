@@ -47,7 +47,10 @@ function children(token: Token): Token[] {
   return nested;
 }
 
-function unsupportedToken(token: Token): string | null {
+// A table cell's line break, which the editor models as a hard break.
+const CELL_LINE_BREAK = /^<br\s*\/?>$/i;
+
+function unsupportedToken(token: Token, inCell: boolean): string | null {
   switch (token.type) {
     case 'code':
     case 'codespan':
@@ -57,7 +60,8 @@ function unsupportedToken(token: Token): string | null {
         ? t('Footnotes are not supported by the rich editor.')
         : t('Reference-style link definitions are not supported by the rich editor.');
     case 'html':
-      if (!(token as Tokens.HTML).block || token.raw.replace(DETAILS_WRAPPER, '').trim()) {
+      if (inCell && !(token as Tokens.HTML).block && CELL_LINE_BREAK.test(token.raw)) return null;
+      if (!(token as Tokens.HTML).block ||token.raw.replace(DETAILS_WRAPPER, '').trim()) {
         return t('Raw HTML is not supported by the rich editor.');
       }
       return null;
@@ -79,22 +83,35 @@ function unsupportedToken(token: Token): string | null {
  *  rewriting syntax it cannot model. Pure; front matter is always fine. The
  *  editor additionally proves the round trip when it loads the document. */
 export function richMarkdownSupport(text: string): RichMarkdownSupport {
-  if (utf8Length(text) > RICH_MARKDOWN_MAX_BYTES) {
-    return { ok: false, reason: t('This file is too large for the rich editor.') };
-  }
-  const { body } = splitFrontMatter(text);
+  return richMarkdownSizeSupport(text) ?? richMarkdownBodySupport(splitFrontMatter(text).body);
+}
+
+/** The size limit alone: a failure, or null when the file is small enough. */
+export function richMarkdownSizeSupport(text: string): RichMarkdownSupport | null {
+  return utf8Length(text) > RICH_MARKDOWN_MAX_BYTES
+    ? { ok: false, reason: t('This file is too large for the rich editor.') }
+    : null;
+}
+
+/** The syntax check of a Markdown body (or any run of whole top-level
+ *  blocks of one: everything it rejects is visible within the block that
+ *  holds it, and definitions are rejected wherever they are). */
+export function richMarkdownBodySupport(body: string): RichMarkdownSupport {
   let tokens: ReturnType<Marked['lexer']>;
   try {
     tokens = lexer.lexer(body.replace(/\r\n?/g, '\n'));
   } catch {
     return { ok: false, reason: t('This file could not be parsed as Markdown.') };
   }
-  const pending: Token[] = [...tokens].reverse();
+  const pending: [Token, boolean][] = tokens.map((token): [Token, boolean] => [token, false]).reverse();
   while (pending.length) {
-    const token = pending.pop()!;
-    const reason = unsupportedToken(token);
+    const [token, inCell] = pending.pop()!;
+    const reason = unsupportedToken(token, inCell);
     if (reason) return { ok: false, reason };
-    if (token.type !== 'code' && token.type !== 'codespan') pending.push(...children(token).reverse());
+    if (token.type !== 'code' && token.type !== 'codespan') {
+      const nested = inCell || token.type === 'table';
+      pending.push(...children(token).map((child): [Token, boolean] => [child, nested]).reverse());
+    }
   }
   const definitions = Object.keys(tokens.links ?? {});
   if (definitions.some((label) => label.startsWith('^'))) {

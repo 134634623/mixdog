@@ -21,6 +21,8 @@ test('ordinary GFM documents are supported', () => {
     'a &amp; b &lt;c&gt; &quot;d&quot;\n',
     '<details>\n<summary>More</summary>\n\nHidden **body**\n\n</details>\n',
     '<details open>\n<summary>Open</summary>\n\nBody\n\n</details>\n',
+    // A table cell's line break.
+    '| a | b |\n| --- | --- |\n| one<br>two | 2 |\n',
   ]) {
     assert.deepEqual(supported(text), { ok: true }, JSON.stringify(text));
   }

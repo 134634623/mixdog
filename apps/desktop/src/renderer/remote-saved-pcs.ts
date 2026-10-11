@@ -65,19 +65,19 @@ export interface SwitcherPc {
 export async function loadWebSwitcherPcs(doFetch: typeof fetch = fetch): Promise<SwitcherPc[]> {
   const deviceId = currentDeviceId();
   if (!deviceId) return [];
-  let name = '';
   let online: boolean | null = null;
   try {
+    // The relay no longer serves the host name here (and throttles with 429):
+    // only presence is read, and the saved name is kept as it is.
     const response = await doFetch(`/pair-code/support?deviceId=${encodeURIComponent(deviceId)}`);
     if (response.ok) {
-      const body = (await response.json()) as { name?: unknown; online?: unknown };
-      name = typeof body.name === 'string' ? body.name : '';
+      const body = (await response.json()) as { online?: unknown };
       online = body.online === true;
     }
   } catch {
     /* offline: keep what is saved */
   }
-  const saved = rememberPc(readSavedPcs(), { deviceId, name, lastConnectedAt: Date.now() });
+  const saved = rememberPc(readSavedPcs(), { deviceId, name: '', lastConnectedAt: Date.now() });
   try {
     localStorage.setItem(SAVED_PCS_KEY, JSON.stringify(saved));
   } catch {

@@ -1,6 +1,10 @@
 import { Globe, Monitor, Smartphone } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import type { DesktopRemoteAccessInfo, DesktopRemotePairCode } from '../../shared/contract';
+import type {
+  DesktopRemoteAccessInfo,
+  DesktopRemotePairCode,
+  DesktopRemotePairCodeUnsupported,
+} from '../../shared/contract';
 import { nativeAppInfo } from '../../shared/native-app';
 import { remoteClientKind, type RemoteClientKind } from '../../shared/remote-trust';
 import { t, uiFormatLocale } from '../i18n';
@@ -133,15 +137,25 @@ const CODE_POLL_MS = 8_000;
  *  on mount, kept fresh on a heartbeat, and withdrawn on unmount. */
 function usePairCode(api: CapabilityApi): {
   code: DesktopRemotePairCode | null;
+  unsupported: boolean;
   now: number;
   renew(): void;
 } {
   const [code, setCode] = useState<DesktopRemotePairCode | null>(null);
+  const [unsupported, setUnsupported] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const request = api.getRemotePairCode;
+  // A relay without codes answers { unsupported: true }; a missing answer from
+  // an older host means the same.
+  // null is a request still pending (a loading state), not "unsupported".
+  const accept = (next: DesktopRemotePairCode | DesktopRemotePairCodeUnsupported | null | undefined): void => {
+    const none = next === undefined || (next !== null && 'unsupported' in next);
+    setUnsupported(none);
+    setCode(none || next === null ? null : next);
+  };
   const renew = (): void => {
     void request?.('renew')
-      .then((next) => setCode(next ?? null))
+      .then(accept)
       .catch(() => undefined);
   };
   useEffect(() => {
@@ -149,7 +163,7 @@ function usePairCode(api: CapabilityApi): {
     let live = true;
     const ensure = () => {
       void request('ensure')
-        .then((next) => live && setCode(next ?? null))
+        .then((next) => live && accept(next))
         .catch(() => undefined);
     };
     ensure();
@@ -162,13 +176,13 @@ function usePairCode(api: CapabilityApi): {
       void request('release').catch(() => undefined);
     };
   }, [request]);
-  return { code, now, renew };
+  return { code, unsupported, now, renew };
 }
 
 /** Connect a device: the QR for cameras, the 6-digit code for everything else.
  *  The pairing URL lives only inside the QR; there is no link to copy. */
 function PairingCard({ info, api }: { info: DesktopRemoteAccessInfo; api: CapabilityApi }) {
-  const { code, now, renew } = usePairCode(api);
+  const { code, unsupported, now, renew } = usePairCode(api);
   return (
     <Group
       title={t('Connect a device')}
@@ -185,7 +199,11 @@ function PairingCard({ info, api }: { info: DesktopRemoteAccessInfo; api: Capabi
             <span className="settings-connection-hint">
               {t('Scan with the Mixdog app (Android · iPhone/iPad) or the camera.')}
             </span>
-            {code && api.getRemotePairCode ? (
+            {unsupported ? (
+              <span className="settings-connection-hint" role="note">
+                {t("This relay doesn't support codes yet — use the QR code")}
+              </span>
+            ) : code && api.getRemotePairCode ? (
               <>
                 <span className="settings-connection-hint">{t('PCs and browsers: enter the code')}</span>
                 <div className="settings-pair-code" role="group" aria-label={t('6-digit code')}>
@@ -206,10 +224,16 @@ function PairingCard({ info, api }: { info: DesktopRemoteAccessInfo; api: Capabi
                   </span>
                 )}
               </>
+            ) : api.getRemotePairCode ? (
+              <span className="settings-connection-hint" role="status">
+                {t('Getting a code…')}
+              </span>
             ) : null}
-            <span className="settings-connection-hint">
-              {t('The code works once, for 5 minutes. This PC must approve every request.')}
-            </span>
+            {unsupported ? null : (
+              <span className="settings-connection-hint">
+                {t('The code works once, for 5 minutes. This PC must approve every request.')}
+              </span>
+            )}
           </div>
         </div>
       </div>

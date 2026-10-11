@@ -30,6 +30,9 @@ final class NotificationService: UNNotificationServiceExtension {
             if let approvalId = message["approvalId"] as? String, !approvalId.isEmpty {
                 info["mxApprovalId"] = approvalId
             }
+            if let hostId = message["hostId"] as? String, !hostId.isEmpty {
+                info["mxHostId"] = hostId
+            }
             // The ciphertext has served its purpose; do not keep it on the notification.
             info.removeValue(forKey: "mx")
             content.userInfo = info

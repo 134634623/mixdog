@@ -2,6 +2,11 @@ package io.mixdog.app;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -12,7 +17,6 @@ final class MixdogPushStore {
   private static final String TOKEN = "fcm_token";
   private static final String ASKED = "permission_asked";
   private static final String PENDING = "pending_actions";
-  private static final int MAX_PENDING = 8;
 
   private MixdogPushStore() {}
 
@@ -36,34 +40,74 @@ final class MixdogPushStore {
     prefs(context).edit().putBoolean(ASKED, true).apply();
   }
 
-  static synchronized void addAction(Context context, String action, String sessionId, String approvalId) {
+  private static List<Map<String, String>> load(Context context) {
+    List<Map<String, String>> queue = new ArrayList<>();
     try {
-      JSONArray queue = new JSONArray(prefs(context).getString(PENDING, "[]"));
-      JSONObject entry = new JSONObject().put("action", action).put("sessionId", sessionId);
-      if (approvalId != null && !approvalId.isEmpty()) entry.put("approvalId", approvalId);
-      queue.put(entry);
-      JSONArray kept = new JSONArray();
-      for (int i = Math.max(0, queue.length() - MAX_PENDING); i < queue.length(); i++) kept.put(queue.get(i));
-      prefs(context).edit().putString(PENDING, kept.toString()).apply();
-    } catch (JSONException ignored) {
-      // A malformed queue is dropped on the next write.
+      JSONArray array = new JSONArray(prefs(context).getString(PENDING, "[]"));
+      for (int i = 0; i < array.length(); i++) {
+        JSONObject item = array.getJSONObject(i);
+        Map<String, String> entry = new HashMap<>();
+        for (String key : new String[] {"id", "action", "sessionId", "approvalId", "hostId", "createdAt"}) {
+          String value = item.optString(key, "");
+          if (!value.isEmpty()) entry.put(key, value);
+        }
+        // Entries parked by an older build had neither id nor timestamp.
+        if (!entry.containsKey("id")) entry.put("id", UUID.randomUUID().toString());
+        if (!entry.containsKey("createdAt")) entry.put("createdAt", String.valueOf(System.currentTimeMillis()));
+        queue.add(entry);
+      }
+    } catch (JSONException e) {
+      // A malformed queue is dropped.
       prefs(context).edit().remove(PENDING).apply();
+      queue.clear();
     }
+    return queue;
   }
 
-  /** Oldest parked action, removed; null when none. */
+  private static void save(Context context, List<Map<String, String>> queue) {
+    JSONArray array = new JSONArray();
+    for (Map<String, String> entry : queue) array.put(new JSONObject(entry));
+    prefs(context).edit().putString(PENDING, array.toString()).apply();
+  }
+
+  private static JSONArray json(List<Map<String, String>> entries) {
+    JSONArray array = new JSONArray();
+    for (Map<String, String> entry : entries) array.put(new JSONObject(entry));
+    return array;
+  }
+
+  /** actionId makes a re-delivered intent idempotent; hostId binds the action to its originating host. */
+  static synchronized void addAction(
+      Context context, String actionId, String action, String sessionId, String approvalId, String hostId) {
+    Map<String, String> entry = new HashMap<>();
+    entry.put("id", actionId == null || actionId.isEmpty() ? UUID.randomUUID().toString() : actionId);
+    entry.put("action", action);
+    entry.put("sessionId", sessionId);
+    if (approvalId != null && !approvalId.isEmpty()) entry.put("approvalId", approvalId);
+    if (hostId != null && !hostId.isEmpty()) entry.put("hostId", hostId);
+    long now = System.currentTimeMillis();
+    entry.put("createdAt", String.valueOf(now));
+    save(context, PendingActionQueue.add(load(context), entry, now));
+  }
+
+  /** Parked actions this host may act on, left in place until acknowledged. */
+  static synchronized JSONArray peekActions(Context context, String hostId) {
+    long now = System.currentTimeMillis();
+    List<Map<String, String>> queue = PendingActionQueue.prune(load(context), now);
+    save(context, queue);
+    return json(PendingActionQueue.forHost(queue, hostId, now));
+  }
+
+  static synchronized void ackAction(Context context, String id) {
+    save(context, PendingActionQueue.ack(load(context), id));
+  }
+
+  /** Legacy (pre-ack web clients): oldest parked action, removed; null when none. */
   static synchronized JSONObject takeAction(Context context) {
-    try {
-      JSONArray queue = new JSONArray(prefs(context).getString(PENDING, "[]"));
-      if (queue.length() == 0) return null;
-      JSONObject first = queue.getJSONObject(0);
-      JSONArray rest = new JSONArray();
-      for (int i = 1; i < queue.length(); i++) rest.put(queue.get(i));
-      prefs(context).edit().putString(PENDING, rest.toString()).apply();
-      return first;
-    } catch (JSONException e) {
-      prefs(context).edit().remove(PENDING).apply();
-      return null;
-    }
+    List<Map<String, String>> queue = PendingActionQueue.prune(load(context), System.currentTimeMillis());
+    if (queue.isEmpty()) return null;
+    Map<String, String> first = queue.get(0);
+    save(context, PendingActionQueue.ack(queue, first.get("id")));
+    return new JSONObject(first);
   }
 }

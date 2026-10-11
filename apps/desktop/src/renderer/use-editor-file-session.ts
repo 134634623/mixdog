@@ -88,9 +88,13 @@ export function useEditorFileSession({
   const onSaveHandleRef = useRef(onSaveHandle);
   onSaveHandleRef.current = onSaveHandle;
 
+  // An edit Rich holds is not in the model, yet leaving would lose it: it
+  // keeps the file dirty, so every close path asks first, and blocks saving.
+  const richHeldRef = useRef(false);
   const markDirty = useCallback((next: boolean) => {
-    setDirty(next);
-    onDirtyRef.current(next);
+    const effective = next || richHeldRef.current;
+    setDirty(effective);
+    onDirtyRef.current(effective);
   }, []);
 
   const { backupTimer, writeBackupNow, deleteBackup, scheduleBackup } = useEditorBackup({
@@ -144,6 +148,10 @@ export function useEditorFileSession({
       const editor = editorRef.current;
       const model = readModel();
       const writer = api?.writeProjectFile;
+      if (richHeldRef.current) {
+        setSaveError(t('Rich holds an edit that is not in the file yet. Resolve or discard it in the Rich editor before saving.'));
+        return false;
+      }
       if (!model || !writer || readOnlyRef.current) return false;
       if (!encoding && model.getValue() === savedText.current) return true;
       if (editorSettings.formatOnSave) {
@@ -331,6 +339,16 @@ export function useEditorFileSession({
       });
   }, [accessToken, api, deleteBackup, readModel, markDirty, projectPath, relPath, writeBackupNow]);
 
+  /** Rich reports whether it holds an edit the model does not have. */
+  const setRichHeld = useCallback(
+    (held: boolean) => {
+      richHeldRef.current = held;
+      const model = readModel();
+      markDirty(model ? model.getValue() !== savedText.current : false);
+    },
+    [markDirty, readModel]
+  );
+
   const onEditorChange = useCallback(
     (value: string | undefined) => {
       const content = String(value ?? '');
@@ -399,6 +417,7 @@ export function useEditorFileSession({
     diffTick,
     savedText,
     markDirty,
+    setRichHeld,
     reload,
     save,
     saveRef,

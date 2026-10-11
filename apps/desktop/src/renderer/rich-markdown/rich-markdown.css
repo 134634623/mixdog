@@ -384,6 +384,23 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--mx-warning, #d7a700) 80%, transparent);
 }
 
+/* -- Held edit notice (an edit the file does not have yet) ------------------ */
+.rich-markdown-held {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: var(--mx-hairline) solid var(--mx-border-muted);
+  background: color-mix(in srgb, var(--mx-danger) 14%, transparent);
+}
+.rich-markdown-held > span {
+  flex: 1 1 auto;
+}
+.rich-markdown-held > button {
+  flex: 0 0 auto;
+}
+
 /* -- Front matter banner ------------------------------------------------------- */
 .rich-markdown-frontmatter {
   margin: 0 0 16px;

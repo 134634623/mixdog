@@ -20,21 +20,30 @@ export function slugifyHeading(text: string): string {
     .replace(/ /g, '-');
 }
 
+const GENERATED_ID_ATTRIBUTE = 'data-generated-id';
+
 /** The headings under `root`, in document order. With `assignIds`, a heading
  *  without an id gets its (deduplicated) slug so `#anchor` links can reach it;
  *  the Rich editor owns its DOM, so its headings are read without ids. */
 export function readHeadings(root: HTMLElement, assignIds: boolean): OutlineHeading[] {
-  const used = new Set<string>();
+  const elements = Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'));
+  // An id this function assigned earlier is regenerated, so the deduplicated
+  // sequence follows live edits; only authored ids are kept and reserved.
+  const isGenerated = (element: HTMLElement) => element.hasAttribute(GENERATED_ID_ATTRIBUTE);
+  const used = new Set(elements.filter((element) => element.id && !isGenerated(element)).map((element) => element.id));
   const headings: OutlineHeading[] = [];
-  root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6').forEach((element, index) => {
+  elements.forEach((element, index) => {
     const text = (element.textContent ?? '').trim();
     if (!text) return;
-    let id = element.id;
+    let id = isGenerated(element) ? '' : element.id;
     if (!id) {
       const base = slugifyHeading(text) || `section-${index}`;
       id = base;
       for (let suffix = 1; used.has(id); suffix += 1) id = `${base}-${suffix}`;
-      if (assignIds) element.id = id;
+      if (assignIds) {
+        element.id = id;
+        element.setAttribute(GENERATED_ID_ATTRIBUTE, '');
+      }
     }
     used.add(id);
     headings.push({ id, level: Number(element.tagName.slice(1)), text, element });

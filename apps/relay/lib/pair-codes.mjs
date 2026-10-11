@@ -5,7 +5,7 @@
 // "entered a code" on the approval dialog, and the desktop still decides.
 // Codes and tickets are secrets of a few minutes' life: they are held in
 // memory only and never written to any log or to disk.
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 
 import { RateLimiter } from './rate-limit.mjs';
 import { isRoutingId } from './ids.mjs';
@@ -31,6 +31,7 @@ export const GLOBAL_FAIL_LIMIT = 60;
 const GLOBAL_FAIL_WINDOW_MS = 10 * 60_000;
 
 const CODE_PATTERN = /^\d{6}$/;
+const LEASE_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 const TICKET_PATTERN = /^[0-9a-f]{32}$/;
 // The bundled phone-app pairing screen is the only cross-origin caller.
 const CORS_ORIGINS = new Set(['https://localhost', 'capacitor://localhost']);
@@ -61,17 +62,27 @@ export class PairCodes {
     }
   }
 
-  /** 'ok' | 'invalid' | 'taken' | 'full'. One live code per device. */
-  register(deviceId, code, name) {
-    if (!isRoutingId(deviceId) || typeof code !== 'string' || !CODE_PATTERN.test(code)) return 'invalid';
+  /** Issues a fresh relay-chosen code under a desktop-named lease. The caller
+   *  never picks or sees any other code, so it cannot probe the code space.
+   *  One live code per device; the lease's expiry is fixed at issue time.
+   *  { status: 'ok', code, lease, ttlMs } | { status: 'invalid' | 'full' } */
+  issue(deviceId, lease, name) {
+    if (!isRoutingId(deviceId) || typeof lease !== 'string' || !LEASE_PATTERN.test(lease)) return { status: 'invalid' };
     this.sweep();
-    const holder = this.codes.get(code);
-    if (holder && holder.deviceId !== deviceId) return 'taken';
     this.clear(deviceId);
-    if (this.codes.size >= MAX_ACTIVE_PAIR_CODES) return 'full';
-    this.codes.set(code, { deviceId, name: cleanName(name), expiresAt: this.now() + PAIR_CODE_TTL_MS });
+    if (this.codes.size >= MAX_ACTIVE_PAIR_CODES) return { status: 'full' };
+    let code = '';
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const candidate = String(randomInt(0, 1_000_000)).padStart(6, '0');
+      if (!this.codes.has(candidate)) {
+        code = candidate;
+        break;
+      }
+    }
+    if (!code) return { status: 'full' };
+    this.codes.set(code, { deviceId, lease, name: cleanName(name), expiresAt: this.now() + PAIR_CODE_TTL_MS });
     this.byDevice.set(deviceId, code);
-    return 'ok';
+    return { status: 'ok', code, lease, ttlMs: PAIR_CODE_TTL_MS };
   }
 
   clear(deviceId) {
@@ -136,7 +147,7 @@ export class PairCodes {
     this.codes.delete(code);
     this.byDevice.delete(row.deviceId);
     const ticket = this.mintTicket(row.deviceId);
-    return { status: 'ok', deviceId: row.deviceId, name: row.name, ticket };
+    return { status: 'ok', deviceId: row.deviceId, name: row.name, ticket, lease: row.lease };
   }
 
   mintTicket(deviceId) {
@@ -238,7 +249,7 @@ async function handleResolve({ pairCodes, liveDesktops }, request, response) {
   const entry = liveDesktops.get(result.deviceId);
   if (desktopLegOpen(entry)) {
     try {
-      entry.socket.send(JSON.stringify({ type: 'pair-code-used' }));
+      entry.socket.send(JSON.stringify({ type: 'pair-code-used', lease: result.lease }));
     } catch {
       /* the desktop redials and republishes */
     }
@@ -246,7 +257,11 @@ async function handleResolve({ pairCodes, liveDesktops }, request, response) {
   reply(request, response, 200, { deviceId: result.deviceId, name: result.name, ticket: result.ticket });
 }
 
-function handleSupport({ liveDesktops, store }, request, response) {
+function handleSupport({ liveDesktops, store, presenceLimiter }, request, response) {
+  if (!presenceLimiter.allow(clientIp(request))) {
+    reply(request, response, 429, { status: 'rate-limited' }, { 'Retry-After': '60' });
+    return;
+  }
   const url = requestUrl(request);
   const deviceId = url?.searchParams.get('deviceId') || '';
   if (!isRoutingId(deviceId) || !store.isKnown(deviceId)) {
@@ -257,7 +272,6 @@ function handleSupport({ liveDesktops, store }, request, response) {
   reply(request, response, 200, {
     online: desktopLegOpen(entry),
     pairV2: entry?.pairV2 === true,
-    ...(entry?.hostName ? { name: entry.hostName } : {}),
   });
 }
 

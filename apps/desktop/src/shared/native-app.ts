@@ -25,12 +25,19 @@ export interface NativeNotificationAction {
   action: 'open' | 'allow' | 'deny';
   sessionId: string;
   approvalId?: string;
+  /** Parked-action id (peek/ack); absent from older shells. */
+  id?: string;
+  /** Host (relay device id) the push came from; absent = any host may act. */
+  hostId?: string;
 }
 
 export interface MixdogNativeCalls {
   getPushState: [undefined, NativePushState];
   requestPush: [undefined, NativePushState];
   takePendingAction: [undefined, NativeNotificationAction | null];
+  /** Actions this host may act on; they stay parked until acknowledged. */
+  peekPendingActions: [{ hostId: string }, NativeNotificationAction[]];
+  ackPendingAction: [{ id: string }, boolean];
   openHostPicker: [undefined, boolean];
   /** Bundled pairing screen only: the relay origins the WebView may load. */
   setAllowedOrigins: [{ origins: string[] }, boolean];

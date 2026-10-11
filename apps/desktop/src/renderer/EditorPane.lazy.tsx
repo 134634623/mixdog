@@ -241,6 +241,7 @@ export default function EditorPane({
     onEditorChange,
     completePreview,
     failPreview,
+    setRichHeld,
   } = useEditorFileSession({
     editorRef,
     modelRef,
@@ -635,6 +636,7 @@ export default function EditorPane({
           onSave={() => {
             void save();
           }}
+          onRichHeldChange={setRichHeld}
           onMount={onMonacoMount}
           onRelease={releaseEditorSurface}
         />

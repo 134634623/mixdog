@@ -44,7 +44,7 @@ import { createRelayCatalogs } from './remote-relay-catalog';
 import { createRelayClientCallDispatch } from './remote-relay-client-calls';
 import { createRelayClientRegistry, type RelayClientState } from './remote-relay-clients';
 import { createRelayControlRequests } from './remote-relay-control';
-import { createPairCodeManager, type PairCodeState } from './remote-pair-code';
+import { createPairCodeManager, type PairCodeState, type PairCodeUnsupported } from './remote-pair-code';
 import { createRelayEnvelopeDispatcher } from './remote-relay-envelope';
 import {
   createRevocationDrain,
@@ -110,7 +110,7 @@ export interface RemoteRelayHandle {
   /** The 6-digit pairing code of an open Settings → Connection screen:
    *  'ensure' returns the live one (minting if needed), 'renew' replaces it,
    *  'release' withdraws it. */
-  pairCode(action: 'ensure' | 'renew' | 'release'): PairCodeState | null;
+  pairCode(action: 'ensure' | 'renew' | 'release'): PairCodeState | PairCodeUnsupported | null;
   revokeClient(clientId: string): Promise<void>;
   /** System resume: the socket is likely half-dead after sleep — drop it and
    *  redial immediately instead of waiting for the ping cycle to notice. */
@@ -125,6 +125,8 @@ export interface RemoteRelayHandle {
  *  phone RPC would hang on it. Any traffic counts as proof of life, so a busy
  *  leg is never terminated for missing a pong. */
 const RELAY_HEARTBEAT_MS = 10_000;
+/** A dial younger than this is not replaced by a resume or network change. */
+const RELAY_DIAL_GRACE_MS = 5_000;
 
 export function startRelayHeartbeat(
   ws: WebSocket,
@@ -274,6 +276,7 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
   let relayTextFrames = false;
   let retryMs = 1_000;
   let reconnectTimer: NodeJS.Timeout | null = null;
+  let connectStartedAt = 0;
   const revocationSockets = new Set<WebSocket>();
   // Bandwidth attribution for this leg, in the relay's own billing unit. On by
   // default: this daemon outlives every window and defers its own shutdown
@@ -288,14 +291,16 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
     sendEnvelope: (payload) => sendEnvelope(payload),
     hostName: hostname().slice(0, 80),
   });
-  const sendEnvelope = (payload: unknown): void => {
+  const sendEnvelope = (payload: unknown): boolean => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       try {
         socket.send(JSON.stringify(payload));
+        return true;
       } catch {
         /* relay vanished */
       }
     }
+    return false;
   };
   /** Sends an ALREADY serialized frame, so callers that must know the exact
    *  wire size the relay will measure can compute it once instead of
@@ -540,6 +545,7 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
     catalogs,
     sessionStates,
     pushStore,
+    hostId: deviceId,
     nativePush: { store: nativeStore, send: sendNativePush },
     live,
     closed: () => closed,
@@ -635,8 +641,8 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
     onCapabilities: handleRelayCapabilities,
     onClientClaim: clientLifecycle.answerClaim,
     onPairCode: (envelope) => {
-      if (envelope.type === 'pair-code-used') pairCode.onUsed();
-      else pairCode.onAck(envelope.ok === true);
+      if (envelope.type === 'pair-code-used') pairCode.onUsed(envelope);
+      else if (envelope.type === 'pair-code-issued') pairCode.onIssued(envelope);
     },
     onClientOpen: clientLifecycle.open,
     onNativePushResult: handleNativePushResult,
@@ -720,7 +726,14 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
   };
 
   const connect = (): void => {
-    if (closed) return;
+    // One live connection attempt at a time: a pending redial is replaced by
+    // this call, and an existing socket is never shadowed by a second one.
+    if (closed || socket) return;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    connectStartedAt = Date.now();
     const connection = relayDeviceSocketOptions(relayUrl, { deviceId, deviceSecret });
     const ws = new WebSocket(connection.url, {
       headers: connection.headers,
@@ -764,8 +777,8 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
         pairV2: 1,
       });
       sendEnvelope({ type: 'desktop-name', name: hostname().slice(0, 80) });
-      // A fresh leg knows nothing of the code the open screen is showing.
-      pairCode.resend();
+      // A fresh leg holds no code of ours: ask for a new one if the screen is open.
+      pairCode.onConnected();
       // Which build this desktop is, so the relay can serve its browsers the
       // matching renderer release. A separate frame (not a desktop-lanes field)
       // and ignored by relays that predate it.
@@ -803,13 +816,18 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
     });
     ws.on('close', () => {
       heartbeat.stop();
+      // A superseded socket owns none of the shared state and schedules nothing.
+      if (socket !== ws) return;
+      socket = null;
       clients.clear();
       resetTransportDeltas();
       mediaLane.destroyAll();
-      if (socket === ws) socket = null;
       if (closed) return;
       control.rejectAll('Relay disconnected.');
-      reconnectTimer = setTimeout(connect, retryMs);
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, retryMs);
       reconnectTimer.unref?.();
       retryMs = Math.min(30_000, retryMs * 2);
     });
@@ -862,12 +880,12 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
       if (closed) return;
       retryMs = 1_000;
       if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
         connect();
         return;
       }
       if (socket) {
+        // An attempt that is still dialing is the fresh connection already.
+        if (socket.readyState === WebSocket.CONNECTING && Date.now() - connectStartedAt < RELAY_DIAL_GRACE_MS) return;
         // The close handler reconnects with the freshly reset backoff.
         try {
           socket.terminate();

@@ -138,6 +138,8 @@ test('nativePush is advertised in the handshake only when the relay can deliver'
   assert.equal('nativePush' in challengeFor(undefined), false);
 });
 
+const HOST_ID = '0123456789abcdef0123456789abcdef';
+
 function notifierFixture({ foreground = false, enabled = true, accept = true } = {}) {
   const phone = device();
   const sent = [];
@@ -145,6 +147,7 @@ function notifierFixture({ foreground = false, enabled = true, accept = true } =
   const removed = [];
   const notifier = createPushNotifier({
     store: web,
+    hostId: HOST_ID,
     isEnabled: () => enabled,
     readFinalAnswer: async () => null,
     isClientForeground: () => false,
@@ -181,6 +184,7 @@ test('native approval push: encrypted content only, same gates as web push', asy
     sessionId: 's1',
     reason: 'approval-pending',
     approvalId: 'a1',
+    hostId: HOST_ID,
   });
 });
 

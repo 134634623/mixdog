@@ -34,9 +34,13 @@ export function useEditorViewMode({
     () => initialViewMode(viewKind, modeKey, markdownDefaultView),
     [viewKind, modeKey, markdownDefaultView]
   );
-  const requested = choice && choice.key === modeKey ? choice.mode : requestedMode;
+  // Read-only files open in Preview, whatever the default or remembered Source;
+  // a manual choice still wins.
+  const defaultMode = readOnly && requestedMode === 'source' ? 'rendered' : requestedMode;
+  const requested = choice && choice.key === modeKey ? choice.mode : defaultMode;
   const [viewSnapshot, setViewSnapshot] = useState<string | null>(null);
-  const [reported, setReported] = useState<{ key: string; reason: string } | null>(null);
+  // The refusal belongs to the text it was reported for.
+  const [reported, setReported] = useState<{ key: string; reason: string; text: string } | null>(null);
   // Rich only mounts for text the Rich editor can round-trip; anything else
   // shows Preview with the reason. Evaluated when Rich is requested (and after
   // a reload), against the model's current text.
@@ -44,10 +48,12 @@ export function useEditorViewMode({
   const richBlock = useMemo(() => {
     if (requested !== 'rich') return '';
     if (readOnly) return t('Read-only files open in Preview.');
-    if (reported?.key === modeKey) return reported.reason;
-    const support = richMarkdownSupport(modelRef.current?.getValue() ?? loadedContent ?? '');
+    const text = modelRef.current?.getValue() ?? loadedContent ?? '';
+    if (reported?.key === modeKey && reported.text === text) return reported.reason;
+    const support = richMarkdownSupport(text);
     return support.ok ? '' : support.reason;
-  }, [requested, readOnly, reported, modeKey, contentRevision, modelRef, loadedContent]);
+    // viewSnapshot changes with every content edit while Preview shows.
+  }, [requested, readOnly, reported, modeKey, contentRevision, viewSnapshot, modelRef, loadedContent]);
   const viewMode: EditorViewMode = requested === 'rich' && richBlock ? 'rendered' : requested;
   const richNotice = requested === 'rich' ? richBlock : '';
   // A reload or revert replaces the model text: a snapshot taken earlier must
@@ -55,7 +61,7 @@ export function useEditorViewMode({
   // biome-ignore lint/correctness/useExhaustiveDependencies: contentRevision is the deliberate trigger; the model text it signals is read through modelRef.
   useEffect(() => {
     if (viewMode === 'source') return;
-    setViewSnapshot((current) => (current === null ? current : (modelRef.current?.getValue() ?? current)));
+    setViewSnapshot((current) => modelRef.current?.getValue() ?? current);
   }, [contentRevision, modelRef, viewMode]);
   // Another surface showing the same file shares this model: keep the rendered
   // snapshot on the latest text so a grid never commits over stale content.
@@ -67,13 +73,25 @@ export function useEditorViewMode({
     return () => listener.dispose();
   }, [viewMode, contentRevision, modelRef]);
   const changeViewMode = (next: EditorViewMode) => {
-    if (next === requested) return;
+    // Compare with the shown mode: clicking Rich while it fell back to Preview retries.
+    if (next === viewMode && next === requested) return;
     if (next !== 'source') setViewSnapshot(modelRef.current?.getValue() ?? loadedContent ?? '');
     setReported(null);
     setChoice({ key: modeKey, mode: next });
     if (viewKind === 'markdown') rememberViewMode(modeKey, next);
   };
   /** The Rich editor refused the document after mounting (onUnsupported). */
-  const reportRichUnsupported = (reason: string) => setReported({ key: modeKey, reason });
-  return { viewMode, richNotice, viewSnapshot, setViewSnapshot, changeViewMode, reportRichUnsupported };
+  const reportRichUnsupported = (reason: string) =>
+    setReported({ key: modeKey, reason, text: modelRef.current?.getValue() ?? loadedContent ?? '' });
+  // Preview always shows the model's current text, also on the render that
+  // follows a fallback from Rich (when no snapshot was taken yet).
+  const renderedSnapshot = viewMode === 'rendered' ? (modelRef.current?.getValue() ?? viewSnapshot) : viewSnapshot;
+  return {
+    viewMode,
+    richNotice,
+    viewSnapshot: renderedSnapshot,
+    setViewSnapshot,
+    changeViewMode,
+    reportRichUnsupported,
+  };
 }

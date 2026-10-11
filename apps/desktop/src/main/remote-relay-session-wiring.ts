@@ -13,6 +13,8 @@ import { synchronizeRelayViews } from './remote-view-sync';
 
 export interface RelaySessionWiringDeps {
   host: DesktopService;
+  /** This desktop's relay device id, stamped into native push payloads. */
+  hostId?: string;
   clients: RelayClientRegistry;
   catalogs: RelayCatalogs;
   sessionStates: RelaySessionStateFanout;
@@ -76,6 +78,7 @@ export function createRelaySessionWiring(deps: RelaySessionWiringDeps): RelaySes
     start: () => {
       const pushNotifier = createPushNotifier({
         store: deps.pushStore,
+        ...(deps.hostId ? { hostId: deps.hostId } : {}),
         isEnabled: () => !deps.closed(),
         readFinalAnswer: (sessionId, startedAt) => deps.host.readSessionFinalAnswer(sessionId, startedAt),
         // Connected is not enough: a phone that just left the app keeps its

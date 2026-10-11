@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { ArrowDown, ArrowUp, CaseSensitive, Copy, ExternalLink, Pencil, Unlink, X } from 'lucide-react';
 import { t } from '../i18n';
 import { copyTextToClipboard } from '../text-format';
@@ -29,12 +29,31 @@ export function RichMarkdownSuggestMenu({
   onHover(index: number): void;
 }) {
   const list = useRef<HTMLDivElement>(null);
+  const listId = useId();
+  const optionId = (index: number) => `${listId}-option-${index}`;
   useEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' });
   }, [selected]);
+  // The menu is a sibling of the editor's contenteditable: point the editor at
+  // the list and its active option while open, and clear them on close.
+  const activeId = items.length ? optionId(Math.min(selected, items.length - 1)) : null;
+  useEffect(() => {
+    const editor = list.current?.parentElement?.querySelector<HTMLElement>('[contenteditable]');
+    if (!editor) return undefined;
+    editor.setAttribute('aria-controls', listId);
+    editor.setAttribute('aria-expanded', 'true');
+    if (activeId) editor.setAttribute('aria-activedescendant', activeId);
+    else editor.removeAttribute('aria-activedescendant');
+    return () => {
+      editor.removeAttribute('aria-controls');
+      editor.removeAttribute('aria-activedescendant');
+      editor.removeAttribute('aria-expanded');
+    };
+  }, [listId, activeId]);
   return (
     <div
       ref={list}
+      id={listId}
       className="rich-markdown-popover rich-markdown-suggest"
       role="listbox"
       aria-label={items[0]?.kind === 'emoji' ? t('Emoji') : t('Insert block')}
@@ -44,6 +63,7 @@ export function RichMarkdownSuggestMenu({
         items.map((item, index) => (
           <div
             key={item.kind === 'command' ? item.command.id : item.code}
+            id={optionId(index)}
             role="option"
             aria-selected={index === selected}
             className="rich-markdown-suggest-item"
@@ -54,7 +74,7 @@ export function RichMarkdownSuggestMenu({
             onMouseEnter={() => onHover(index)}
           >
             {item.kind === 'command' ? (
-              t(item.command.label)
+              t(item.command.label, item.command.labelParams)
             ) : (
               <>
                 <span className="rich-markdown-suggest-emoji">{item.emoji}</span>

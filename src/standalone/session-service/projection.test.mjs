@@ -105,3 +105,29 @@ test('a mismatched entry no longer makes the publish path report a failure', (t)
   assert.deepEqual(f.frames, []);
   assert.equal(f.logs.filter((line) => line.startsWith('publish failed')).length, 0);
 });
+
+test('a retention-cleared entry on an address mismatch never serves the other conversation, and other sessions still sync', () => {
+  const f = fixture();
+  const snap = (sessionId) => ({ sessionId, items: [], queued: [] });
+  const make = (id, state, published) => ({
+    runtime: { getState: () => state, isWireSafe: true },
+    addressedSessionId: id,
+    indexedSessionId: id,
+    publishedSnapshot: published,
+    revision: 5,
+    subscribers: new Set(['viewer']),
+    disposed: false,
+    timer: null,
+  });
+  const cleared = make('sess_a', snap('sess_b'), undefined);
+  const good = make('sess_c', snap('sess_c'), undefined);
+  const steps = [cleared, good].map((entry) => f.projection.advance(entry));
+  assert.equal(steps[0].changed, false);
+  assert.equal(steps[0].unavailable, true);
+  assert.equal(steps[0].snapshot, null);
+  const body = f.projection.bodyForClient(steps[0], null);
+  assert.deepEqual(body, { revision: 5, unavailable: true });
+  assert.equal('full' in body, false);
+  assert.equal(steps[1].changed, true);
+  assert.equal(steps[1].snapshot.sessionId, 'sess_c');
+});

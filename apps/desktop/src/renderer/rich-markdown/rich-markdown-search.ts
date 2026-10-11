@@ -30,15 +30,37 @@ export function findRichMarkdownMatches(
   caseSensitive = false
 ): RichMarkdownSearchMatch[] {
   if (!query) return [];
-  const needle = caseSensitive ? query : query.toLowerCase();
+  // Folded per character exactly like the document below (lowercasing a
+  // whole string is context-sensitive: a final `Σ` becomes `ς`, not `σ`).
+  const needle = caseSensitive ? query : Array.from(query, (char) => char.toLowerCase()).join('');
   const matches: RichMarkdownSearchMatch[] = [];
   let run = '';
   let runStart = -1;
   const flush = () => {
     if (run) {
-      const haystack = caseSensitive ? run : run.toLowerCase();
+      // Lowercasing may change a character's length (`İ` → `i̇`): each unit
+      // of the haystack remembers the run offsets of the character it came from.
+      let haystack = run;
+      let from: number[] | null = null;
+      let to: number[] | null = null;
+      if (!caseSensitive) {
+        haystack = '';
+        from = [];
+        to = [];
+        let offset = 0;
+        for (const char of run) {
+          const lower = char.toLowerCase();
+          haystack += lower;
+          for (let unit = 0; unit < lower.length; unit++) {
+            from.push(offset);
+            to.push(offset + char.length);
+          }
+          offset += char.length;
+        }
+      }
       for (let index = haystack.indexOf(needle); index !== -1; index = haystack.indexOf(needle, index + needle.length)) {
-        matches.push({ from: runStart + index, to: runStart + index + needle.length });
+        const end = index + needle.length;
+        matches.push({ from: runStart + (from ? from[index] : index), to: runStart + (to ? to[end - 1] : end) });
       }
     }
     run = '';

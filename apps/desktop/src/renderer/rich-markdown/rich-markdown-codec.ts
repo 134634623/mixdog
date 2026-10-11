@@ -1,9 +1,9 @@
 import { getSchema, type AnyExtension, type JSONContent } from '@tiptap/core';
-import type { Schema } from '@tiptap/pm/model';
+import type { Mark, Node as ProseMirrorNode, Schema } from '@tiptap/pm/model';
 import { MarkdownManager } from '@tiptap/markdown';
 import { Marked, type Token, type Tokens } from 'marked';
 import { t } from '../i18n';
-import { createRichMarkdownExtensions, INLINE_MATH_SOURCE } from './rich-markdown-extensions';
+import { createRichMarkdownExtensions, INLINE_MATH_SOURCE, richMarkdownMarked } from './rich-markdown-extensions';
 
 /** Plain CommonMark+GFM renderer used only as an independent judge: two
  *  Markdown texts that render the same HTML here mean the same document. */
@@ -53,8 +53,38 @@ export interface RichMarkdownCodec {
   serialize(doc: JSONContent): string;
 }
 
+/** Bare URLs as GFM autolinks them; their characters are written as typed,
+ *  so the autolink reads back as exactly the typed text. */
+const BARE_URL = /(?:(?:https?|ftp):\/\/|www\.)[^\s<]*/gi;
+const INLINE_MATH_ANYWHERE = new RegExp(INLINE_MATH_SOURCE, 'g');
+
+/** Text escaping on top of the manager's own: bare URLs are left as typed,
+ *  and `$…$` that would read back as math gets its opening `$` escaped. */
+function escapeRichMarkdownText(text: string, base: (text: string) => string): string {
+  let out = '';
+  let last = 0;
+  for (const match of text.matchAll(BARE_URL)) {
+    out += base(text.slice(last, match.index)) + match[0];
+    last = match.index + match[0].length;
+  }
+  out += base(text.slice(last));
+  return out.replace(INLINE_MATH_ANYWHERE, (math) => `\\${math}`);
+}
+
+const escapingManagers = new WeakSet<MarkdownManager>();
+
+/** Installs the rich editor's text escaping on a manager (once). */
+function installTextEscaping(manager: MarkdownManager): void {
+  if (escapingManagers.has(manager)) return;
+  escapingManagers.add(manager);
+  const target = manager as unknown as { escapeMarkdownSyntax(text: string): string };
+  const base = target.escapeMarkdownSyntax.bind(manager);
+  target.escapeMarkdownSyntax = (text) => escapeRichMarkdownText(text, base);
+}
+
 /** A codec over an existing schema and Markdown manager (the live editor's own). */
 export function richMarkdownCodecFor(schema: Schema, manager: MarkdownManager): RichMarkdownCodec {
+  installTextEscaping(manager);
   return {
     schema,
     parse(markdown) {
@@ -69,7 +99,7 @@ export function richMarkdownCodecFor(schema: Schema, manager: MarkdownManager): 
 
 /** A headless codec over the editor's exact extension set. */
 export function createRichMarkdownCodec(extensions: AnyExtension[] = createRichMarkdownExtensions()): RichMarkdownCodec {
-  const manager = new MarkdownManager({ marked: new Marked() as never, markedOptions: { gfm: true }, extensions });
+  const manager = new MarkdownManager({ marked: richMarkdownMarked() as never, markedOptions: { gfm: true }, extensions });
   return richMarkdownCodecFor(getSchema(extensions), manager);
 }
 
@@ -103,9 +133,103 @@ export function checkRichMarkdownRoundTrip(codec: RichMarkdownCodec, body: strin
   return { ok: true, doc, canonical };
 }
 
-const toLf = (text: string) => text.replace(/\r\n/g, '\n');
+const decodeHref = (href: string) =>
+  href.replace(/&(amp|lt|gt|quot|#39);/g, (_entity, name: string) =>
+    ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[name] ?? name
+  );
 
-function dominantEol(text: string): '\n' | '\r\n' {
+/** A link GFM makes of bare text by itself (a URL, `www.` host or email
+ *  address): it means the same as that text without the link. */
+function isAutolink(mark: Mark, text: string | undefined): boolean {
+  if (mark.type.name !== 'link' || !text) return false;
+  const href = decodeHref(String(mark.attrs.href ?? ''));
+  return href === text || href === `http://${text}` || href === `mailto:${text}`;
+}
+
+/** A textblock's inline content as Markdown carries it: whitespace outside
+ *  code collapses to one unmarked space, and is dropped at the block's edges
+ *  and next to line breaks, which themselves vanish at the edges. */
+function inlineMeaning(block: ProseMirrorNode): unknown[] {
+  const out: unknown[] = [];
+  let space = false;
+  const push = (marks: string, text: string) => {
+    const last = out.at(-1);
+    if (Array.isArray(last) && last[0] === 'text' && last[1] === marks) last[2] += text;
+    else out.push(['text', marks, text]);
+  };
+  block.forEach((child) => {
+    const marks = JSON.stringify(
+      child.marks.filter((mark) => !isAutolink(mark, child.text)).map((mark) => [mark.type.name, mark.attrs])
+    );
+    if (!child.isText) {
+      if (child.type.name === 'hardBreak') {
+        space = false;
+        if (out.length) out.push('\n');
+        return;
+      }
+      if (space && out.length && out.at(-1) !== '\n') push('', ' ');
+      space = false;
+      out.push([child.type.name, child.attrs, marks]);
+      return;
+    }
+    const code = child.marks.some((mark) => mark.type.spec.code);
+    for (const char of child.text ?? '') {
+      if (!code && /[ \t\r\n]/.test(char)) {
+        space = true;
+        continue;
+      }
+      if (space && out.length && out.at(-1) !== '\n') push('', ' ');
+      space = false;
+      push(marks, char);
+    }
+  });
+  while (out.at(-1) === '\n') out.pop();
+  return out;
+}
+
+/** A node's meaning for comparison; empty paragraphs (which Markdown cannot
+ *  hold) are left out. */
+function blockMeaning(node: ProseMirrorNode): unknown[] {
+  if (node.type.spec.code || node.isLeaf) return [node.type.name, node.attrs, node.textContent];
+  if (node.isTextblock) return [node.type.name, node.attrs, inlineMeaning(node)];
+  const children: unknown[] = [];
+  node.forEach((child) => {
+    const meaning = blockMeaning(child);
+    if (child.type.name !== 'paragraph' || (meaning[2] as unknown[]).length) children.push(meaning);
+  });
+  return [node.type.name, node.attrs, children];
+}
+
+/** What a run of top-level blocks means, as comparable text. */
+export function richMarkdownBlocksMeaning(blocks: readonly ProseMirrorNode[]): string {
+  const meanings: unknown[] = [];
+  for (const block of blocks) {
+    const meaning = blockMeaning(block);
+    if (block.type.name !== 'paragraph' || (meaning[2] as unknown[]).length) meanings.push(meaning);
+  }
+  return JSON.stringify(meanings);
+}
+
+/** Whether two editor documents mean the same Markdown: equal up to
+ *  whitespace Markdown does not keep, empty paragraphs, and links GFM makes
+ *  of bare URLs. */
+export function sameRichMarkdownDocument(
+  schema: Schema,
+  a: JSONContent | ProseMirrorNode,
+  b: JSONContent | ProseMirrorNode
+): boolean {
+  const children = (doc: JSONContent | ProseMirrorNode) => {
+    const node = 'nodeSize' in doc ? (doc as ProseMirrorNode) : schema.nodeFromJSON(doc);
+    const list: ProseMirrorNode[] = [];
+    node.forEach((child) => list.push(child));
+    return list;
+  };
+  return richMarkdownBlocksMeaning(children(a)) === richMarkdownBlocksMeaning(children(b));
+}
+
+export const toLf = (text: string) => text.replace(/\r\n/g, '\n');
+
+export function dominantEol(text: string): '\n' | '\r\n' {
   const crlf = (text.match(/\r\n/g) ?? []).length;
   const lf = (text.match(/\n/g) ?? []).length - crlf;
   return crlf > 0 && crlf >= lf ? '\r\n' : '\n';
@@ -139,6 +263,26 @@ function sourceBlocks(text: string): SourceUnit[] | null {
   return offset === text.length ? blocks : null;
 }
 
+/** Top-level blocks of `text` as the reference lexer splits them: their
+ *  token type and source span (trailing newlines excluded), or null when the
+ *  lexer did not account for every character. */
+export function markdownBlockSpans(text: string): { type: string; start: number; end: number }[] | null {
+  let tokens: Token[];
+  try {
+    tokens = reference.lexer(text);
+  } catch {
+    return null;
+  }
+  const spans: { type: string; start: number; end: number }[] = [];
+  let offset = 0;
+  for (const token of tokens) {
+    if (text.slice(offset, offset + token.raw.length) !== token.raw) return null;
+    if (token.type !== 'space') spans.push({ type: token.type, start: offset, end: offset + token.raw.replace(/\n+$/, '').length });
+    offset += token.raw.length;
+  }
+  return offset === text.length ? spans : null;
+}
+
 /** Consecutive units over `text` from their raw lengths, or null when they do
  *  not tile it exactly. */
 function tiledUnits(text: string, parts: { raw: string; key: string }[]): SourceUnit[] | null {
@@ -154,11 +298,134 @@ function tiledUnits(text: string, parts: { raw: string; key: string }[]): Source
 
 type Refine = (source: string, unit: SourceUnit, target: string, edited: SourceUnit) => string | null;
 
+/** Work budget (diagonal steps times run length) for one Myers diff. */
+const MAX_DIFF_WORK = 2_000_000;
+
+/** A shortest edit script's unchanged pairs between `before[b0, b1)` and
+ *  `after[a0, a1)` (Myers, O((n+m)·d)), or null past the work budget. */
+function myersPairs(
+  before: SourceUnit[],
+  after: SourceUnit[],
+  b0: number,
+  b1: number,
+  a0: number,
+  a1: number
+): [number, number][] | null {
+  const n = b1 - b0;
+  const m = a1 - a0;
+  const max = n + m;
+  const maxD = Math.min(max, Math.floor(MAX_DIFF_WORK / Math.max(max, 1)));
+  const offset = max + 1;
+  const v = new Int32Array(2 * max + 3);
+  const trace: Int32Array[] = [];
+  const same = (x: number, y: number) => before[b0 + x].key === after[a0 + y].key;
+  for (let d = 0; d <= maxD; d++) {
+    trace.push(v.slice());
+    for (let k = -d; k <= d; k += 2) {
+      let x = k === -d || (k !== d && v[offset + k - 1] < v[offset + k + 1]) ? v[offset + k + 1] : v[offset + k - 1] + 1;
+      let y = x - k;
+      while (x < n && y < m && same(x, y)) {
+        x++;
+        y++;
+      }
+      v[offset + k] = x;
+      if (x >= n && y >= m) {
+        const pairs: [number, number][] = [];
+        for (let step = d; step > 0; step--) {
+          const previous = trace[step];
+          const diagonal = x - y;
+          const fromK =
+            diagonal === -step || (diagonal !== step && previous[offset + diagonal - 1] < previous[offset + diagonal + 1])
+              ? diagonal + 1
+              : diagonal - 1;
+          const fromX = previous[offset + fromK];
+          const fromY = fromX - fromK;
+          while (x > fromX && y > fromY) pairs.push([b0 + --x, a0 + --y]);
+          x = fromX;
+          y = fromY;
+        }
+        while (x > 0 && y > 0) pairs.push([b0 + --x, a0 + --y]);
+        return pairs.reverse();
+      }
+    }
+  }
+  return null;
+}
+
+/** Index pairs of units that stay unchanged between `before[b0, b1)` and
+ *  `after[a0, a1)`. A shortest diff within the work budget; beyond it, units
+ *  whose key is unique on both sides anchor the alignment (in order, the
+ *  longest increasing run of them) and the gaps between are aligned the same
+ *  way, so unchanged units keep their bytes however far apart the changes are. */
+function unchangedPairs(
+  before: SourceUnit[],
+  after: SourceUnit[],
+  b0: number,
+  b1: number,
+  a0: number,
+  a1: number
+): [number, number][] {
+  const head: [number, number][] = [];
+  while (b0 < b1 && a0 < a1 && before[b0].key === after[a0].key) head.push([b0++, a0++]);
+  const tail: [number, number][] = [];
+  while (b0 < b1 && a0 < a1 && before[b1 - 1].key === after[a1 - 1].key) tail.unshift([--b1, --a1]);
+  if (b0 === b1 || a0 === a1) return [...head, ...tail];
+  const direct = myersPairs(before, after, b0, b1, a0, a1);
+  if (direct) return [...head, ...direct, ...tail];
+  const counts = new Map<string, { b: number; a: number; at: number }>();
+  for (let i = b0; i < b1; i++) {
+    const entry = counts.get(before[i].key) ?? { b: 0, a: 0, at: -1 };
+    entry.b++;
+    entry.at = i;
+    counts.set(before[i].key, entry);
+  }
+  const candidates: [number, number][] = [];
+  for (let j = a0; j < a1; j++) {
+    const entry = counts.get(after[j].key);
+    if (entry) entry.a++;
+  }
+  for (let j = a0; j < a1; j++) {
+    const entry = counts.get(after[j].key);
+    if (entry && entry.b === 1 && entry.a === 1) candidates.push([entry.at, j]);
+  }
+  // Longest run of candidates increasing on both sides (patience sorting).
+  const tails: number[] = [];
+  const links: number[] = [];
+  candidates.forEach(([b], index) => {
+    let low = 0;
+    let high = tails.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (candidates[tails[mid]][0] < b) low = mid + 1;
+      else high = mid;
+    }
+    links[index] = low ? tails[low - 1] : -1;
+    tails[low] = index;
+  });
+  const anchors: [number, number][] = [];
+  for (let index = tails.length ? tails[tails.length - 1] : -1; index !== -1; index = links[index]) {
+    anchors.unshift(candidates[index]);
+  }
+  // Without anchors the run cannot be narrowed: it is rewritten as one.
+  if (!anchors.length) return [...head, ...tail];
+  const pairs: [number, number][] = [...head];
+  let b = b0;
+  let a = a0;
+  for (const anchor of anchors) {
+    pairs.push(...unchangedPairs(before, after, b, anchor[0], a, anchor[1]), anchor);
+    b = anchor[0] + 1;
+    a = anchor[1] + 1;
+  }
+  pairs.push(...unchangedPairs(before, after, b, b1, a, a1), ...tail);
+  return pairs;
+}
+
 /**
- * `source` with the units that differ from `target` (after the common prefix
- * and suffix) replaced by `target`'s text for them. When exactly one unit
- * changed on each side, `refine` may rewrite it in place, keeping its own
- * unchanged parts. `separator` joins units appended after the last one.
+ * `source` with every run of units that differs from `target` replaced by
+ * `target`'s text for it; units both sides share (aligned by key) keep their
+ * bytes, also between two separate changes. Where exactly one unit changed
+ * on each side, `refine` may rewrite it in place, keeping its own unchanged
+ * parts. `separator` joins units appended after the last one.
  */
 function spliceUnits(
   source: string,
@@ -178,19 +445,36 @@ function spliceUnits(
   ) {
     suffix++;
   }
-  if (refine && before.length - prefix - suffix === 1 && after.length - prefix - suffix === 1) {
-    const unit = before[prefix];
-    const refined = refine(source, unit, target, after[prefix]);
-    if (refined !== null) return source.slice(0, unit.start) + refined + source.slice(unit.end);
-  }
   const sourceAt = (index: number) => (index < before.length ? before[index].start : source.length);
   const targetAt = (index: number) => (index < after.length ? after[index].start : target.length);
-  const middle = target.slice(targetAt(prefix), targetAt(after.length - suffix));
-  // Units appended after the original's last one need their own separator,
-  // or the first of them would continue the preceding one.
-  const head =
-    prefix === before.length && middle ? source.replace(/\n*$/, '') + separator : source.slice(0, sourceAt(prefix));
-  return head + middle + source.slice(sourceAt(before.length - suffix));
+  const anchors = [
+    ...unchangedPairs(before, after, prefix, before.length - suffix, prefix, after.length - suffix),
+    [before.length - suffix, after.length - suffix] as [number, number],
+  ];
+  let out = source.slice(0, sourceAt(prefix));
+  let b = prefix;
+  let a = prefix;
+  for (const [nextB, nextA] of anchors) {
+    const refined =
+      refine && nextB - b === 1 && nextA - a === 1 ? refine(source, before[b], target, after[a]) : null;
+    if (refined !== null) {
+      out += refined + source.slice(before[b].end, sourceAt(nextB));
+    } else if (b < nextB || a < nextA) {
+      const middle = target.slice(targetAt(a), targetAt(nextA));
+      // Units appended after the original's last one need their own
+      // separator, or the first of them would continue the preceding one.
+      if (b === before.length && middle) {
+        const kept = out.replace(/\n*$/, '');
+        out = kept ? kept + separator : kept;
+      }
+      out += middle;
+    }
+    // The unchanged unit at the anchor, with the text up to the next unit.
+    if (nextB < before.length - suffix) out += source.slice(sourceAt(nextB), sourceAt(nextB + 1));
+    b = nextB + 1;
+    a = nextA + 1;
+  }
+  return out + source.slice(sourceAt(before.length - suffix));
 }
 
 /** Blocks of `source` the edit left alone keep their bytes; compound blocks

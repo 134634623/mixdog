@@ -18,9 +18,7 @@ import {
   markDirectBrowserSurface,
 } from './mobile-surface';
 import { browserProfile } from './remote-browser-identity';
-import { REMOTE_PAIRING_STORAGE_KEYS, isRemoteClientCredential } from './remote-pairing-recovery';
-
-const CLAIM_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.claim;
+import { isRemoteClientCredential } from './remote-pairing-recovery';
 
 // The one-time ticket a 6-digit code was redeemed for (`#pair=<ticket>` on the
 // route the code page or the phone app sent us to). It rides the first claim so
@@ -43,10 +41,17 @@ const takeTicketFromAddress = (): void => {
  *  approval loop waits for it to come back. */
 const hostAllowsDirectBrowser = async (deviceId: string, base: string): Promise<boolean> => {
   if (!deviceId) return false;
+  const url = `${new URL('/pair-code/support', base).toString()}?deviceId=${encodeURIComponent(deviceId)}`;
   try {
-    const response = await fetch(`${new URL('/pair-code/support', base).toString()}?deviceId=${encodeURIComponent(deviceId)}`, {
-      signal: AbortSignal.timeout(3_000),
-    });
+    // The relay throttles this probe (429): wait out a short Retry-After once
+    // instead of dropping a capable host to the install guide. Only
+    // online/pairV2 are read — the host name is no longer served here.
+    let response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
+    if (response.status === 429) {
+      const seconds = Number(response.headers.get('Retry-After'));
+      await new Promise((done) => window.setTimeout(done, Math.min(Number.isFinite(seconds) ? seconds : 1, 3) * 1_000));
+      response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
+    }
     if (!response.ok) return false;
     const body = (await response.json()) as { online?: unknown; pairV2?: unknown };
     return body.online !== true || body.pairV2 === true;
@@ -62,6 +67,8 @@ interface RemotePairingScreenDeps {
   /** The route this container captured at install time — the ONE thing it
    *  knows about the desktop that may approve it. */
   deviceId: string;
+  /** Where this desktop's pending claim is kept (per relay origin + device). */
+  claimStorageKey: string;
   /** The relay origin to ask, read per attempt because a credential reset
    *  returns it to this page's own origin. */
   serverBase: () => string;
@@ -78,10 +85,10 @@ interface RemotePairingScreenDeps {
 // The request already waiting on the desktop, kept across reloads: a phone OS
 // discards a backgrounded web app freely, and a forgotten request would mean
 // asking again — one more prompt on the desktop for the same connection.
-const savePendingClaim = async (claimId: string, keyPair: RelayClaimKeyPair): Promise<void> => {
+const savePendingClaim = async (storageKey: string, claimId: string, keyPair: RelayClaimKeyPair): Promise<void> => {
   try {
     localStorage.setItem(
-      CLAIM_STORAGE_KEY,
+      storageKey,
       JSON.stringify({
         claimId,
         keyPair: await exportRelayClaimKeyPair(keyPair),
@@ -92,12 +99,14 @@ const savePendingClaim = async (claimId: string, keyPair: RelayClaimKeyPair): Pr
   }
 };
 
-const loadPendingClaim = async (): Promise<{
+const loadPendingClaim = async (
+  storageKey: string
+): Promise<{
   claimId: string;
   keyPair: RelayClaimKeyPair;
 } | null> => {
   try {
-    const raw = localStorage.getItem(CLAIM_STORAGE_KEY) || '';
+    const raw = localStorage.getItem(storageKey) || '';
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { claimId?: unknown; keyPair?: unknown };
     const keyPair = await importRelayClaimKeyPair(parsed.keyPair);
@@ -108,9 +117,9 @@ const loadPendingClaim = async (): Promise<{
   }
 };
 
-const clearPendingClaim = (): void => {
+const clearPendingClaim = (storageKey: string): void => {
   try {
-    localStorage.removeItem(CLAIM_STORAGE_KEY);
+    localStorage.removeItem(storageKey);
   } catch {
     /* private storage */
   }
@@ -133,7 +142,7 @@ const requestApproval = async (
   const base = deps.serverBase();
   // Resuming beats asking: the desktop may already be showing the prompt for
   // the request this app opened before it was discarded.
-  const resumed = await loadPendingClaim();
+  const resumed = await loadPendingClaim(deps.claimStorageKey);
   const keyPair = resumed?.keyPair ?? (await generateRelayClaimKeyPair());
   let claimId = resumed?.claimId ?? '';
   const profile = await browserProfile();
@@ -174,7 +183,7 @@ const requestApproval = async (
         await wait(5_000);
         continue;
       }
-      await savePendingClaim(claimId, keyPair);
+      await savePendingClaim(deps.claimStorageKey, claimId, keyPair);
     }
     onStatus(earlyUiT('Waiting for approval on your desktop…'));
     const deadline = Date.now() + 300_000;
@@ -204,7 +213,7 @@ const requestApproval = async (
       const directTab = layer.dataset.direct === '1';
       // A box that does not open is a refused approval, never a half pairing.
       if (!material || !isRemoteClientCredential(credential) || !deps.acceptApproval(credential, material)) {
-        clearPendingClaim();
+        clearPendingClaim(deps.claimStorageKey);
         onStatus(earlyUiT('That approval could not be verified.'), true);
         return;
       }
@@ -215,7 +224,7 @@ const requestApproval = async (
         onStatus(error instanceof Error ? error.message : String(error), true);
         return;
       }
-      clearPendingClaim();
+      clearPendingClaim(deps.claimStorageKey);
       layer.classList.add('mrp-ok');
       const waitTitle = layer.querySelector<HTMLElement>('[data-role="wait-title"]');
       if (waitTitle) waitTitle.textContent = earlyUiT('Success');
@@ -230,7 +239,7 @@ const requestApproval = async (
       window.setTimeout(() => (directTab ? location.reload() : layer.remove()), 900);
       return;
     }
-    clearPendingClaim();
+    clearPendingClaim(deps.claimStorageKey);
     onStatus(
       outcome === 'denied' ? earlyUiT('The request was declined on your desktop.') : earlyUiT('The request expired.'),
       true

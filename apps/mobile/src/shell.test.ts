@@ -8,7 +8,20 @@ import {
   readHostBook,
   rememberHost,
 } from './hosts.ts';
-import { compareVersions, pickUpdate } from './update.ts';
+import { checkForUpdate, compareVersions, pickUpdate } from './update.ts';
+
+test('a launch-budgeted update check gives up on a stalled lookup instead of holding the launch', async () => {
+  const stalled: typeof fetch = (_input, init) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+  const started = Date.now();
+  // AbortSignal.timeout does not keep the loop alive on its own.
+  const keepAlive = setTimeout(() => {}, 5_000);
+  assert.equal(await checkForUpdate('1.0.0', stalled, 50), null);
+  clearTimeout(keepAlive);
+  assert.ok(Date.now() - started < 1_000);
+});
 
 const ID = '0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9';
 

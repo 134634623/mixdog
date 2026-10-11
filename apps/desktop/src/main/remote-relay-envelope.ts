@@ -30,7 +30,7 @@ export function createRelayEnvelopeDispatcher(
       deps.onNativePushResult?.(envelope);
       return;
     }
-    if (envelope.type === 'pair-code-ack' || envelope.type === 'pair-code-used') {
+    if (envelope.type === 'pair-code-issued' || envelope.type === 'pair-code-used') {
       deps.onPairCode?.(envelope);
       return;
     }

@@ -131,3 +131,87 @@ test('parked actions are delivered once, approvals resolve through the web API',
   assert.deepEqual(later, []);
   stopLater();
 });
+
+test('an approval whose call is cut off by the reconnect is sent again, and an answer ends the retries', async () => {
+  const queue = [{ action: 'allow', sessionId: 's1', approvalId: 'a1' }];
+  const native = nativeWith({ takePendingAction: () => queue.shift() ?? null });
+  let calls = 0;
+  let answered;
+  const done = new Promise((resolve) => (answered = resolve));
+  const api = {
+    resolveToolApprovalForSession: async () => {
+      calls += 1;
+      if (calls < 3) throw new Error('Remote connection interrupted.');
+      answered();
+      return false; // already settled / stale: an answer, not a failure
+    },
+  };
+  assert.equal(await drainNativeNotificationActions({ native, api, retryDelayMs: 1 }), 1);
+  await done;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(calls, 3);
+  assert.equal(await drainNativeNotificationActions({ native, api, retryDelayMs: 1 }), 0);
+});
+
+const parkedShell = (items) => ({
+  platform: 'android',
+  version: '1.0.0',
+  call: async (method, args) => {
+    if (method === 'peekPendingActions') {
+      return items.filter((a) => !a.hostId || a.hostId === args.hostId);
+    }
+    if (method === 'ackPendingAction') {
+      const at = items.findIndex((a) => a.id === args.id);
+      if (at >= 0) items.splice(at, 1);
+      return true;
+    }
+    throw new Error(`unexpected ${method}`);
+  },
+});
+
+test('only the connected host takes its actions; other hosts stay parked, and ack follows the answer', async () => {
+  const items = [
+    { id: 'h-a1', action: 'allow', sessionId: 's1', approvalId: 'a1', hostId: 'hostA' },
+    { id: 'h-b1', action: 'deny', sessionId: 's2', approvalId: 'a2', hostId: 'hostB' },
+    { id: 'h-open', action: 'open', sessionId: 's3', hostId: 'hostA' },
+  ];
+  const native = parkedShell(items);
+  const resolved = [];
+  const api = {
+    resolveToolApprovalForSession: async (sessionId, id, decision) => {
+      resolved.push([sessionId, id, decision]);
+      return false; // wrong/stale answer is still an answer
+    },
+  };
+  assert.equal(await drainNativeNotificationActions({ native, api, hostId: 'hostA' }), 2);
+  await until(() => items.length === 1);
+  assert.deepEqual(resolved, [['s1', 'a1', { approved: true }]]);
+  assert.deepEqual(items.map((a) => a.id), ['h-b1']);
+});
+
+test('an approval nobody answered stays parked and is retried by the next drain', async () => {
+  const items = [{ id: 'unanswered-1', action: 'allow', sessionId: 's1', approvalId: 'a1', hostId: 'hostA' }];
+  const native = parkedShell(items);
+  let fail = true;
+  let calls = 0;
+  const api = {
+    resolveToolApprovalForSession: async () => {
+      calls += 1;
+      if (fail) throw new Error('Remote connection interrupted.');
+      return true;
+    },
+  };
+  await drainNativeNotificationActions({ native, api, hostId: 'hostA', retryDelayMs: 1 });
+  await until(() => calls === 4);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(items.length, 1);
+  fail = false;
+  await drainNativeNotificationActions({ native, api, hostId: 'hostA', retryDelayMs: 1 });
+  await until(() => items.length === 0);
+  assert.equal(calls, 5);
+});
+
+test('the shim host reports the connected device id for action matching', () => {
+  const host = createNativePushHost({ peerNativePush: true, call: async () => {}, deviceId: 'dev-1' });
+  assert.equal(host.hostId(), 'dev-1');
+});

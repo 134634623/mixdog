@@ -34,6 +34,7 @@ export function frameBody(step, prepend = false) {
 
 /** Response body for the CALLER, which announced the revision it holds. */
 export function bodyForClient(step, baseRevision, prepend = false) {
+  if (step.unavailable) return { revision: step.revision, unavailable: true };
   if (!step.changed && baseRevision === step.revision) return { revision: step.revision };
   if (step.patch && baseRevision === step.previousRevision) return frameBody(step, prepend);
   return { revision: step.revision, full: step.snapshot };
@@ -108,10 +109,14 @@ export function createRevisionSteps({ revisionEpoch, index, updateEntryBusy, log
         entry.addressMismatchLogged = projectedSessionId;
         log(`session ${addressedSessionId} changed its durable address to ${projectedSessionId}; serving last snapshot`);
       }
-      const stale = entry.publishedSnapshot ?? current;
+      // `current` belongs to ANOTHER conversation and is never served for this
+      // address; with no published snapshot left (retention cleared it) the
+      // step says so and callers answer without a body.
+      const stale = entry.publishedSnapshot ?? null;
       const staleRevision = entry.revision || 0;
       return {
         changed: false,
+        ...(stale ? {} : { unavailable: true }),
         snapshot: stale,
         revision: staleRevision,
         previousRevision: staleRevision,

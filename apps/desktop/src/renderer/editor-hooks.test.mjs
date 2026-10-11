@@ -173,3 +173,53 @@ test('a tab whose file vanished explains it instead of printing ENOENT', async (
     delete window.mixdogDesktop;
   }
 });
+
+test('a Rich-held edit keeps the file dirty and refuses every save until it is resolved', async () => {
+  let text = 'saved';
+  const model = { getValue: () => text, setValue: (value) => (text = value) };
+  const writes = [];
+  const dirty = [];
+  let session;
+  window.mixdogDesktop = {
+    readProjectFile: async () => ({ content: 'saved', mtimeMs: 1, binary: false, tooLarge: false }),
+    writeProjectFile: async (...args) => (writes.push(args), { mtimeMs: 2 }),
+    writeEditorBackup: async () => {},
+    deleteEditorBackup: async () => {},
+  };
+  function Harness() {
+    const editorRef = useRef(null);
+    const modelRef = useRef(model);
+    const syncLspRef = useRef(async () => true);
+    session = useEditorFileSession({
+      editorRef,
+      modelRef,
+      syncLspRef,
+      projectPath: 'C:/Project/demo',
+      relPath: 'held.md',
+      active: false,
+      editorSettings: { formatOnSave: false },
+      notifyReady() {},
+      onDirty: (value) => dirty.push(value),
+    });
+    return null;
+  }
+  const root = createRoot(document.querySelector('main'));
+  try {
+    await act(async () => root.render(React.createElement(Harness)));
+    await act(async () => session.setRichHeld(true));
+    assert.equal(dirty.at(-1), true, 'a held edit is unsaved work for the close guards');
+    // Not even an unchanged model may "save": the held edit would be lost silently.
+    await act(async () => assert.equal(await session.save(), false));
+    assert.equal(writes.length, 0);
+    assert.match(session.saveError, /Rich/);
+    // Model edits while held still cannot clear the dirty flag.
+    await act(async () => session.onEditorChange('saved'));
+    assert.equal(dirty.at(-1), true);
+    await act(async () => session.setRichHeld(false));
+    assert.equal(dirty.at(-1), false, 'discarding the held edit leaves the file clean');
+    await act(async () => assert.equal(await session.save(), true));
+  } finally {
+    await act(async () => root.unmount());
+    delete window.mixdogDesktop;
+  }
+});

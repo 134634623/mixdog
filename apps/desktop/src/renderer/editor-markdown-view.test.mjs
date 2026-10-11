@@ -230,3 +230,207 @@ test('useEditorViewMode: remembered mode, setting default, per-file choice, Rich
     await act(async () => root.unmount());
   }
 });
+
+test('useEditorViewMode: Preview after a Rich fallback shows the current model text, not the loaded text', async () => {
+  const { useEditorViewMode } = await import('./use-editor-view-mode.ts');
+  window.localStorage.clear();
+  store.resetViewModeMemory();
+  const listeners = new Set();
+  const model = {
+    value: '# Title\n',
+    getValue() {
+      return this.value;
+    },
+    onDidChangeContent(listener) {
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    },
+  };
+  const modelRef = { current: model };
+  const hook = { current: null };
+  function Harness({ readOnly = false, defaultView = 'rich', modeKey = 'C:/p/fix.md' }) {
+    hook.current = useEditorViewMode({
+      viewKind: 'markdown',
+      modelRef,
+      loadedContent: '# Title\n',
+      contentRevision: 0,
+      modeKey,
+      markdownDefaultView: defaultView,
+      readOnly,
+    });
+    return null;
+  }
+  const host = document.createElement('div');
+  document.querySelector('main').append(host);
+  const root = createRoot(host);
+  const render = (props = {}) => act(async () => root.render(React.createElement(Harness, props)));
+  const edit = (value) =>
+    act(async () => {
+      model.value = value;
+      for (const listener of [...listeners]) listener();
+    });
+  try {
+    await render();
+    assert.equal(hook.current.viewMode, 'rich', 'Rich opened directly');
+    model.value = '# Edited in Monaco\n';
+    await act(async () => hook.current.reportRichUnsupported('Nope'));
+    assert.equal(hook.current.viewMode, 'rendered');
+    assert.equal(hook.current.viewSnapshot, '# Edited in Monaco\n', 'current model text, not the loaded text');
+    // The rejection belongs to the text it was reported for.
+    await edit('# Fixed\n');
+    assert.equal(hook.current.viewMode, 'rich', 'changed content invalidates the rejection');
+    assert.equal(hook.current.richNotice, '');
+    // An explicit click on Rich retries while the fallback is showing.
+    await act(async () => hook.current.reportRichUnsupported('Still no'));
+    assert.equal(hook.current.viewMode, 'rendered');
+    await act(async () => hook.current.changeViewMode('rich'));
+    assert.equal(hook.current.viewMode, 'rich');
+    // Read-only files open in Preview even with a Source default or memory.
+    window.localStorage.clear();
+    store.resetViewModeMemory();
+    await render({ readOnly: true, defaultView: 'source', modeKey: 'C:/p/ro.md' });
+    assert.equal(hook.current.viewMode, 'rendered');
+    store.rememberViewMode('C:/p/ro2.md', 'source');
+    await render({ readOnly: true, defaultView: 'preview', modeKey: 'C:/p/ro2.md' });
+    assert.equal(hook.current.viewMode, 'rendered');
+    await act(async () => hook.current.changeViewMode('source'));
+    assert.equal(hook.current.viewMode, 'source', 'a manual switch still works');
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+test('outline: generated ids are regenerated after edits; authored ids are kept and reserved', async () => {
+  const { readHeadings } = await import('./editor-markdown-outline.tsx');
+  const root = document.createElement('div');
+  root.innerHTML = '<h1>A</h1><h2>B</h2>';
+  assert.deepEqual(readHeadings(root, true).map((heading) => heading.id), ['a', 'b']);
+  root.querySelector('h2').textContent = 'A';
+  const edited = readHeadings(root, true);
+  assert.deepEqual(edited.map((heading) => heading.id), ['a', 'a-1']);
+  assert.equal(root.querySelectorAll('h2')[0].id, 'a-1');
+  const authored = document.createElement('div');
+  authored.innerHTML = '<h1>x</h1><h2 id="x">Authored</h2>';
+  assert.deepEqual(readHeadings(authored, true).map((heading) => heading.id), ['x-1', 'x']);
+});
+
+test('EditorViewSwitch: roving tabindex and arrow/Home/End selection', async () => {
+  const { EditorViewSwitch, nextViewSwitchMode } = await import('./editor-view-switch.tsx');
+  const modes = ['rendered', 'rich', 'source'];
+  assert.equal(nextViewSwitchMode(modes, 'source', 'ArrowRight'), 'rendered');
+  assert.equal(nextViewSwitchMode(modes, 'rendered', 'ArrowLeft'), 'source');
+  assert.equal(nextViewSwitchMode(modes, 'rich', 'ArrowDown'), 'source');
+  assert.equal(nextViewSwitchMode(modes, 'rich', 'ArrowUp'), 'rendered');
+  assert.equal(nextViewSwitchMode(modes, 'rich', 'Home'), 'rendered');
+  assert.equal(nextViewSwitchMode(modes, 'rich', 'End'), 'source');
+  assert.equal(nextViewSwitchMode(modes, 'rich', 'a'), null);
+  const changes = [];
+  const host = document.createElement('div');
+  document.querySelector('main').append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(EditorViewSwitch, {
+          toggle: { value: 'rich', renderedLabel: 'Preview', modes, onChange: (mode) => changes.push(mode) },
+        })
+      )
+    );
+    const radios = [...host.querySelectorAll('[role="radio"]')];
+    assert.deepEqual(radios.map((radio) => radio.tabIndex), [-1, 0, -1]);
+    await act(async () => {
+      radios[1].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    });
+    await act(async () => {
+      radios[1].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }));
+    });
+    assert.deepEqual(changes, ['source', 'rendered']);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+test('suggest menu: options have ids and the editor points at the list and active option while open', async () => {
+  const { RichMarkdownSuggestMenu } = await import('./rich-markdown/RichMarkdownOverlays.tsx');
+  const { RICH_MARKDOWN_BLOCK_COMMANDS } = await import('./rich-markdown/rich-markdown-commands.ts');
+  const items = RICH_MARKDOWN_BLOCK_COMMANDS.slice(0, 3).map((command) => ({ kind: 'command', command }));
+  function Canvas({ open, selected }) {
+    return React.createElement(
+      'div',
+      { className: 'rich-markdown-canvas' },
+      React.createElement('div', { contentEditable: 'true', className: 'ProseMirror' }),
+      open
+        ? React.createElement(RichMarkdownSuggestMenu, {
+            items,
+            selected,
+            point: { top: 0, left: 0 },
+            onPick() {},
+            onHover() {},
+          })
+        : null
+    );
+  }
+  const host = document.createElement('div');
+  document.querySelector('main').append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => root.render(React.createElement(Canvas, { open: true, selected: 1 })));
+    const editor = host.querySelector('.ProseMirror');
+    const list = host.querySelector('[role="listbox"]');
+    const options = [...host.querySelectorAll('[role="option"]')];
+    assert.ok(list.id);
+    assert.equal(new Set(options.map((option) => option.id)).size, 3);
+    assert.equal(editor.getAttribute('aria-controls'), list.id);
+    assert.equal(editor.getAttribute('aria-expanded'), 'true');
+    assert.equal(editor.getAttribute('aria-activedescendant'), options[1].id);
+    await act(async () => root.render(React.createElement(Canvas, { open: true, selected: 2 })));
+    assert.equal(editor.getAttribute('aria-activedescendant'), options[2].id);
+    await act(async () => root.render(React.createElement(Canvas, { open: false, selected: 0 })));
+    for (const name of ['aria-controls', 'aria-expanded', 'aria-activedescendant']) {
+      assert.equal(editor.hasAttribute(name), false, `${name} cleared when closed`);
+    }
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+test('slash menu heading labels use the Heading {{level}} catalog key', async () => {
+  const { RICH_MARKDOWN_BLOCK_COMMANDS, filterBlockCommands } = await import('./rich-markdown/rich-markdown-commands.ts');
+  const h3 = RICH_MARKDOWN_BLOCK_COMMANDS.find((command) => command.id === 'heading3');
+  assert.equal(h3.label, 'Heading {{level}}');
+  assert.deepEqual(h3.labelParams, { level: 3 });
+  assert.equal(filterBlockCommands('heading 3')[0].id, 'heading3');
+});
+
+test('EditorViewSwitch: arrows walk all three radios while Rich falls back to Preview', async () => {
+  const { EditorViewSwitch } = await import('./editor-view-switch.tsx');
+  const modes = ['rendered', 'rich', 'source'];
+  const changes = [];
+  const host = document.createElement('div');
+  document.querySelector('main').append(host);
+  const root = createRoot(host);
+  try {
+    // Preview stays selected: Rich was requested but falls back.
+    await act(async () =>
+      root.render(
+        React.createElement(EditorViewSwitch, {
+          toggle: { value: 'rendered', renderedLabel: 'Preview', modes, onChange: (mode) => changes.push(mode) },
+        })
+      )
+    );
+    const radios = [...host.querySelectorAll('[role="radio"]')];
+    assert.deepEqual(radios.map((radio) => radio.getAttribute('aria-checked')), ['true', 'false', 'false']);
+    assert.deepEqual(radios.map((radio) => radio.tabIndex), [0, -1, -1]);
+    const press = (radio, key) =>
+      act(async () => {
+        radio.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      });
+    await press(radios[0], 'ArrowRight');
+    assert.equal(document.activeElement, radios[1]);
+    await press(radios[1], 'ArrowRight');
+    assert.equal(document.activeElement, radios[2]);
+    assert.deepEqual(changes, ['rich', 'source']);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

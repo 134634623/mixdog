@@ -16,7 +16,6 @@ export const LEGACY_HOST_FALLBACKS = {
   getUpdaterState: (): Promise<DesktopUpdaterState> => Promise.resolve(DISABLED_UPDATER),
   checkForDesktopUpdate: (): Promise<DesktopUpdaterState> => Promise.resolve(DISABLED_UPDATER),
   showDesktopUpdate: (): Promise<DesktopUpdaterState> => Promise.resolve(DISABLED_UPDATER),
-  subscribeUpdaterState: (_listener: (state: DesktopUpdaterState) => void): (() => void) => () => {},
   trashProjectEntry: (): Promise<void> => Promise.reject(new Error(DESKTOP_ONLY_TRASH)),
   browserReleasePage: (): Promise<void> => Promise.resolve(),
 };

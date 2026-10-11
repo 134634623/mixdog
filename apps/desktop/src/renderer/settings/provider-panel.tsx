@@ -191,7 +191,9 @@ export function OAuthControl({
   const openSignInPage = (url: unknown) => {
     if (typeof url === 'string' && url) void window.mixdogDesktop?.openExternal?.(url).catch(() => undefined);
   };
-  const loginLabel = providerId === 'cursor-oauth' ? 'Cursor OAuth' : `${providerLabel(provider)} OAuth`;
+  // Provider labels such as "OpenAI OAuth" already name the method.
+  const baseLabel = providerId === 'cursor-oauth' ? 'Cursor' : providerLabel(provider);
+  const loginLabel = /\bOAuth$/u.test(baseLabel) ? baseLabel : `${baseLabel} OAuth`;
   const status = settingsStatus(flowState || 'pending');
   useEffect(() => {
     onCompleteRef.current = onComplete;

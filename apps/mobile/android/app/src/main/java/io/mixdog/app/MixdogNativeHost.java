@@ -156,6 +156,11 @@ public final class MixdogNativeHost implements WebViewCompat.WebMessageListener 
             }
           }
           return state().toString();
+        case "peekPendingActions":
+          return MixdogPushStore.peekActions(activity, args.optString("hostId", "")).toString();
+        case "ackPendingAction":
+          MixdogPushStore.ackAction(activity, args.optString("id", ""));
+          return "true";
         case "takePendingAction":
           JSONObject action = MixdogPushStore.takeAction(activity);
           return action == null ? "null" : action.toString();

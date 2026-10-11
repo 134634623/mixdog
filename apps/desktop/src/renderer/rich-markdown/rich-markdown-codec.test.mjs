@@ -5,6 +5,7 @@ import {
   createRichMarkdownCodec,
   minimalTextEdit,
   reconcileMarkdown,
+  sameRichMarkdownDocument,
   semanticMarkdown,
 } from './rich-markdown-codec.ts';
 import { frontMatterLines, splitFrontMatter } from './rich-markdown-frontmatter.ts';
@@ -77,9 +78,87 @@ test('every supported construct survives a parse and serialize round trip', () =
 });
 
 test('content that would change in the editor fails the round trip', () => {
-  for (const markdown of ['<div>raw</div>\n', 'a <kbd>b</kbd>\n', '&copy; 2024\n', '````\n```\ninner\n```\n````\n']) {
+  for (const markdown of ['<div>raw</div>\n', 'a <kbd>b</kbd>\n', '&copy; 2024\n']) {
     assert.equal(checkRichMarkdownRoundTrip(codec, markdown).ok, false, JSON.stringify(markdown));
   }
+});
+
+test('code holding fence lines and table cells holding line breaks round-trip', () => {
+  const nested = '````\n```\ninner\n```\n````\n';
+  assert.equal(checkRichMarkdownRoundTrip(codec, nested).ok, true);
+  assert.equal(canonical(nested).trimEnd(), nested.trimEnd());
+  const cell = '| a | b |\n| --- | --- |\n| one<br>two | 2 |\n';
+  const result = checkRichMarkdownRoundTrip(codec, cell);
+  assert.equal(result.ok, true, result.reason);
+  const paragraph = result.doc.content[0].content[1].content[0].content[0];
+  assert.deepEqual(
+    paragraph.content.map((node) => node.type),
+    ['text', 'hardBreak', 'text']
+  );
+});
+
+test('edits to the first and last of a thousand identical paragraphs keep every one between untouched', () => {
+  const middle = Array.from({ length: 1000 }, () => 'Middle __bold__ text here.\n\n').join('');
+  const original = `First paragraph.\n\n${middle}Last paragraph.\n`;
+  assert.ok(original.length > 24_000);
+  const edited = canonical(original).replace('First paragraph.', 'First paragraph!').replace('Last paragraph.', 'Last paragraph!');
+  assert.equal(reconcileMarkdown(original, edited), `First paragraph!\n\n${middle}Last paragraph!\n`);
+  // Also when the run is too long for a direct diff: unique blocks anchor it.
+  const distinct = Array.from({ length: 3000 }, (_, i) => `Para ${i} __bold__.\n\n`).join('');
+  const long = `${distinct}End.\n`;
+  const changed = canonical(long)
+    .replace('Para 0 **bold**.', 'Para 0 **bold**!')
+    .replace('Para 1500 **bold**.', 'Para 1500 **bold**!')
+    .replace(/Para (\d*[02468]) \*\*bold\*\*\./g, (match, n) => (Number(n) % 7 === 3 ? `${match} edited` : match))
+    .replace('End.', 'End!');
+  const reconciled = reconcileMarkdown(long, changed);
+  assert.match(reconciled, /^Para 0 \*\*bold\*\*!\n\nPara 1 __bold__\.\n\n/);
+  assert.match(reconciled, /\n\nPara 1499 __bold__\.\n\nPara 1500 \*\*bold\*\*!\n\nPara 1501 __bold__\.\n\n/);
+  assert.match(reconciled, /\n\nPara 10 \*\*bold\*\*\. edited\n\nPara 11 __bold__\.\n\n/);
+  assert.match(reconciled, /Para 2999 __bold__\.\n\nEnd!\n$/);
+});
+
+test('ordinary paragraph text is written so it reads back as the same text', () => {
+  const paragraph = (text) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+  for (const text of ['1) item', '3. three', '- dash', '+ plus', '# hash', '> quote', '---', '===', '| --- |', '    indented', '```', '~~~', '$a$', 'https://example.com/a_b', 'www.example.com/~x']) {
+    for (const block of [
+      paragraph(text),
+      { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph(text)] }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'lead' }, { type: 'hardBreak' }, { type: 'text', text }] },
+    ]) {
+      const doc = { type: 'doc', content: [paragraph('before'), block] };
+      const markdown = codec.serialize(doc);
+      assert.equal(sameRichMarkdownDocument(codec.schema, codec.parse(markdown), doc), true, `${JSON.stringify(text)} → ${JSON.stringify(markdown)}`);
+    }
+  }
+  // A bare URL reads back as an autolink: the same text, so the same document.
+  const url = { type: 'doc', content: [paragraph('see https://example.com.')] };
+  const reread = codec.parse(codec.serialize(url));
+  assert.equal(reread.content[0].content[1].marks[0].type, 'link');
+  assert.equal(sameRichMarkdownDocument(codec.schema, reread, url), true);
+});
+
+test('case-insensitive search folds the query like the document, keeping document positions', async () => {
+  const { findRichMarkdownMatches } = await import('./rich-markdown-search.ts');
+  const doc = codec.schema.nodeFromJSON(codec.parse('ΟΣ and οσ, İx\n'));
+  assert.deepEqual(findRichMarkdownMatches(doc, 'ΟΣ'), [
+    { from: 1, to: 3 },
+    { from: 8, to: 10 },
+  ]);
+  assert.deepEqual(findRichMarkdownMatches(doc, 'οσ'), findRichMarkdownMatches(doc, 'ΟΣ'));
+  assert.deepEqual(findRichMarkdownMatches(doc, 'İX'), [{ from: 12, to: 14 }]);
+  assert.deepEqual(findRichMarkdownMatches(doc, 'ΟΣ', true), [{ from: 1, to: 3 }]);
+});
+
+test('separate edits in one commit keep the untouched blocks between them byte for byte', () => {
+  const original = '# First\n\n* keep\n* this\n\nMiddle __bold__.\n\n# Last\n';
+  const edited = canonical(original).replace('# First', '# First!').replace('# Last', '# Last!');
+  assert.equal(reconcileMarkdown(original, edited), '# First!\n\n* keep\n* this\n\nMiddle __bold__.\n\n# Last!\n');
+  const list = '* a\n* b\n* c\n* d\n';
+  assert.equal(
+    reconcileMarkdown(list, canonical(list).replace('- a', '- A').replace('- d', '- D')),
+    '* A\n* b\n* c\n* D\n'
+  );
 });
 
 test('an unchanged document reconciles to its exact original bytes (no churn)', () => {

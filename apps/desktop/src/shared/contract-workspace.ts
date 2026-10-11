@@ -32,6 +32,11 @@ export interface DesktopRemotePairCode {
   expiresAt: number;
 }
 
+/** The relay cannot issue codes (older relay): show no code, say why. */
+export interface DesktopRemotePairCodeUnsupported {
+  unsupported: true;
+}
+
 /** An installed web app asking this desktop for access. It arrives with no
  *  credential — approving it here is what creates one. */
 export interface DesktopRemoteClientClaim {

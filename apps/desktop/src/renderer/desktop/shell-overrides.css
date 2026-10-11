@@ -432,3 +432,18 @@ html[data-mixdog-mobile-tabs] .workbench-search-mode button[aria-selected='true'
   bottom: 0;
 }
 
+
+/* Assistant response footer: the desktop rule outranks the compact mobile tier (24px). */
+html[data-mixdog-mobile-tabs] .message.assistant .response-footer .message-actions {
+  width: var(--mx-touch-fixed-main);
+  height: var(--mx-touch-fixed-main);
+}
+
+/* OAuth login dialog: in phone landscape the card is taller than the viewport, so scroll it instead of clipping the footer. */
+html[data-mixdog-mobile-tabs] .settings-oauth-dialog {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+html[data-mixdog-mobile-tabs] .settings-oauth-dialog > * {
+  flex-shrink: 0;
+}

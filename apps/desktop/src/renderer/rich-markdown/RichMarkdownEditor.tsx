@@ -39,12 +39,13 @@ export interface RichMarkdownEditorProps {
   onSave(): void;
   onOpenFile?(project: string, rel: string, line?: number): void;
   onUnsupported(reason: string): void;
+  /** Whether the editor holds an edit the file does not have yet: the host
+   *  keeps Rich in view until it is written or explicitly discarded. */
+  onHeldChange?(held: boolean): void;
 }
 
 /** Meta on transactions that load content: they are not user edits. */
 const PROGRAMMATIC = 'richMarkdownProgrammatic';
-/** Typing settles this long before the Markdown is written to the model. */
-const COMMIT_DELAY_MS = 250;
 const HOVER_HIDE_MS = 250;
 
 interface MenuState {
@@ -107,16 +108,28 @@ function typedTrigger(state: EditorState): { kind: 'slash' | 'emoji'; query: str
   return null;
 }
 
-/** Loads a document without it counting as an edit or an undo step. */
-function replaceDocument(editor: Editor, json: JSONContent, initial: boolean) {
+/** Loads a document without it counting as an edit. Only the part that
+ *  differs is replaced, so the caret stays put across a change made
+ *  elsewhere; after an undo or redo (`toChange`) it moves to the end of the
+ *  changed part, where the undone or redone edit was. */
+function replaceDocument(editor: Editor, json: JSONContent, initial: boolean, toChange = false) {
   const doc = editor.schema.nodeFromJSON(json);
   const { state } = editor;
-  const tr = state.tr
-    .replaceWith(0, state.doc.content.size, doc.content)
-    .setMeta(PROGRAMMATIC, true)
-    .setMeta('addToHistory', false);
+  const tr = state.tr.setMeta(PROGRAMMATIC, true);
+  const start = state.doc.content.findDiffStart(doc.content);
+  if (start !== null) {
+    let { a: endA, b: endB } = state.doc.content.findDiffEnd(doc.content)!;
+    const overlap = start - Math.min(endA, endB);
+    if (overlap > 0) {
+      endA += overlap;
+      endB += overlap;
+    }
+    tr.replace(start, endA, doc.slice(start, endB));
+    if (!tr.doc.eq(doc)) tr.replaceWith(0, tr.doc.content.size, doc.content);
+    if (toChange) tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(endB, tr.doc.content.size)), -1)).scrollIntoView();
+  }
   if (initial) tr.setSelection(TextSelection.atStart(tr.doc));
-  editor.view.dispatch(tr);
+  if (tr.docChanged || initial) editor.view.dispatch(tr);
 }
 
 function openWebUrl(url: string) {
@@ -130,15 +143,18 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
   const { modelRef, text, projectPath, relPath, readOnly, active } = props;
   const canvasRef = useRef<HTMLDivElement>(null);
   const syncRef = useRef<RichMarkdownModelSync | null>(null);
-  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
+  /** Set while an undo or redo reloads the editor from the model. */
+  const historyRef = useRef(false);
+  const [held, setHeld] = useState<string | null>(null);
   const [frontMatter, setFrontMatter] = useState('');
   const [unsupported, setUnsupported] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [prompt, setPrompt] = useState<PromptState | null>(null);
   const [linkBubble, setLinkBubble] = useState<LinkBubbleState | null>(null);
   const [search, setSearch] = useState<SearchUiState | null>(null);
+  const [history, setHistory] = useState({ canUndo: false, canRedo: false });
 
   // ProseMirror keeps the handlers it was created with; they read the
   // current render's values through this ref.
@@ -164,25 +180,45 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
       handleDOMEvents: {
         mouseover: (view, event) => live.current.hover(view, event),
         mouseout: (_view, event) => live.current.unhover(event),
+        beforeinput: (_view, event) => live.current.beforeInput(event),
       },
     },
     onUpdate: ({ transaction }) => live.current.update(transaction),
     onTransaction: ({ transaction }) => live.current.transaction(transaction),
-    onBlur: () => live.current.commitNow(),
+    onBlur: () => syncRef.current?.endUndoStep(),
   }));
   const editor = useEditor(options, []);
 
-  const cancelCommit = () => {
-    if (commitTimer.current) clearTimeout(commitTimer.current);
-    commitTimer.current = null;
+  const refreshHistory = () => {
+    const sync = syncRef.current;
+    const canUndo = Boolean(sync?.canUndo());
+    const canRedo = Boolean(sync?.canRedo());
+    setHistory((current) => (current.canUndo === canUndo && current.canRedo === canRedo ? current : { canUndo, canRedo }));
   };
 
-  const commitNow = () => {
-    if (!commitTimer.current) return;
-    cancelCommit();
+  /** Undo and redo run on the model's history, shared with Source mode. */
+  const runHistory = (direction: 'undo' | 'redo') => {
     const sync = syncRef.current;
-    if (!sync || editor.isDestroyed || unsupported) return;
-    sync.commit(editor.getMarkdown());
+    if (!sync || !editor.isEditable) return;
+    historyRef.current = true;
+    try {
+      sync[direction]();
+    } finally {
+      historyRef.current = false;
+    }
+    refreshHistory();
+  };
+
+  /** Drops the held edit (the user's explicit choice) and shows the file. */
+  const discardHeld = () => {
+    historyRef.current = true;
+    try {
+      syncRef.current?.discard();
+    } finally {
+      historyRef.current = false;
+    }
+    refreshHistory();
+    editor.commands.focus();
   };
 
   const pointAt = (pos: number): OverlayPoint => {
@@ -308,8 +344,9 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
 
   function liveHandlers() {
     return {
-      commitNow,
+      refreshHistory,
       reportUnsupported: (reason: string) => props.onUnsupported(reason),
+      reportHeld: (isHeld: boolean) => props.onHeldChange?.(isHeld),
       editMath: (kind: 'inlineMath' | 'blockMath', latex: string, pos: number) => {
         if (editor.isEditable) openPrompt(kind, { latex, pos });
       },
@@ -329,11 +366,23 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
             return true;
           }
         }
-        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k' && editor.isEditable) {
+        const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
+        const key = event.key.toLowerCase();
+        if (mod && key === 'k' && editor.isEditable) {
           openPrompt('link');
           return true;
         }
+        if (mod && (key === 'z' || key === 'y')) {
+          runHistory(key === 'y' || event.shiftKey ? 'redo' : 'undo');
+          return true;
+        }
         return false;
+      },
+      beforeInput(event: InputEvent): boolean {
+        if (event.inputType !== 'historyUndo' && event.inputType !== 'historyRedo') return false;
+        event.preventDefault();
+        runHistory(event.inputType === 'historyUndo' ? 'undo' : 'redo');
+        return true;
       },
       click(view: EditorView, pos: number, event: MouseEvent): boolean {
         if (view.editable && !(event.ctrlKey || event.metaKey)) return false;
@@ -373,14 +422,12 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
           setLinkBubble((current) => (current?.source === 'hover' ? null : current));
         }, HOVER_HIDE_MS);
       },
+      // Every edit reaches the model at once: nothing waits in the editor for
+      // a change made elsewhere to overwrite, and the dirty state is current.
       update(transaction: Transaction) {
         if (!transaction.docChanged || transaction.getMeta(PROGRAMMATIC) || unsupported) return;
-        cancelCommit();
-        commitTimer.current = setTimeout(() => {
-          commitTimer.current = null;
-          const sync = syncRef.current;
-          if (sync && !editor.isDestroyed) sync.commit(editor.getMarkdown());
-        }, COMMIT_DELAY_MS);
+        syncRef.current?.commit(editor.state.doc);
+        refreshHistory();
       },
       transaction(transaction: Transaction) {
         const { state } = editor;
@@ -424,31 +471,39 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
   }
   live.current = liveHandlers();
 
-  // Load the model, follow its changes, and flush pending edits on the way out.
+  // Load the model, follow its changes (including undo and redo), and end
+  // the undo step on the way out.
   const model = modelRef.current;
   useLayoutEffect(() => {
     if (!model) return;
     const sync = new RichMarkdownModelSync(model, richMarkdownCodecFor(editor.schema, editor.markdown!), {
       onDocument(doc, nextFrontMatter) {
-        cancelCommit();
-        replaceDocument(editor, doc, !loadedRef.current);
+        replaceDocument(editor, doc, !loadedRef.current, historyRef.current);
         loadedRef.current = true;
         setFrontMatter(nextFrontMatter);
         setUnsupported(false);
       },
       onFrontMatter: setFrontMatter,
       onUnsupported(reason) {
-        cancelCommit();
         setUnsupported(true);
         live.current.reportUnsupported(reason);
+      },
+      onHeld(reason) {
+        setHeld(reason);
+        live.current.reportHeld(reason !== null);
       },
     });
     syncRef.current = sync;
     sync.start();
+    const changes = model.onDidChangeContent(() => live.current.refreshHistory());
+    live.current.refreshHistory();
     return () => {
-      live.current.commitNow();
+      changes.dispose();
+      sync.flush();
       sync.dispose();
       if (syncRef.current === sync) syncRef.current = null;
+      setHeld(null);
+      live.current.reportHeld(false);
     };
   }, [editor, model]);
 
@@ -460,7 +515,7 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
   useEffect(() => {
     if (active) syncRef.current?.refresh();
     else {
-      live.current.commitNow();
+      syncRef.current?.flush();
       setMenu(null);
       setPrompt(null);
       setLinkBubble(null);
@@ -488,7 +543,9 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
     if (mod && !event.altKey && !event.shiftKey && key === 's') {
       event.preventDefault();
       event.stopPropagation();
-      commitNow();
+      // A held edit is not in the file: saving now would save without it.
+      // The notice stays up with the choice to discard it.
+      if (syncRef.current?.flush() === false) return;
       props.onSave();
     } else if (mod && !event.altKey && !event.shiftKey && key === 'f') {
       event.preventDefault();
@@ -505,7 +562,30 @@ export default function RichMarkdownEditor(props: RichMarkdownEditorProps) {
   return (
     <RichMarkdownDocumentContext.Provider value={{ projectPath, relPath, readOnly }}>
       <div className="rich-markdown" data-readonly={readOnly || undefined} onKeyDown={onRootKeyDown}>
-        <RichMarkdownToolbar editor={editor} readOnly={readOnly} onPrompt={(kind) => openPrompt(kind)} onSearch={openSearch} />
+        <RichMarkdownToolbar
+          editor={editor}
+          readOnly={readOnly}
+          canUndo={history.canUndo}
+          canRedo={history.canRedo}
+          onUndo={() => {
+            runHistory('undo');
+            editor.commands.focus();
+          }}
+          onRedo={() => {
+            runHistory('redo');
+            editor.commands.focus();
+          }}
+          onPrompt={(kind) => openPrompt(kind)}
+          onSearch={openSearch}
+        />
+        {held !== null ? (
+          <div className="rich-markdown-held" role="alert">
+            <span>{held}</span>
+            <button type="button" onClick={discardHeld}>
+              {t('Discard edit')}
+            </button>
+          </div>
+        ) : null}
         {search ? (
           <RichMarkdownSearchBar
             query={search.query}

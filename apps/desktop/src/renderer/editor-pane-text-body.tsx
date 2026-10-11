@@ -1,7 +1,7 @@
 // The text-file body of the editor pane: the rendered view (SVG, Markdown,
 // table) over the Monaco surface, which stays mounted while hidden so unsaved
 // edits survive the view toggle.
-import { lazy, Suspense, useRef, type ComponentProps, type RefObject } from 'react';
+import { lazy, Suspense, useRef, useState, type ComponentProps, type RefObject } from 'react';
 import { t } from './i18n';
 import SharedEditorSurface from './SharedEditorSurface';
 import { EditorOutline, useMarkdownOutline } from './editor-markdown-outline';
@@ -38,6 +38,7 @@ export function EditorPaneTextBody({
   onFail,
   onOpenFile,
   onSave,
+  onRichHeldChange,
   onMount,
   onRelease,
 }: {
@@ -66,13 +67,18 @@ export function EditorPaneTextBody({
   onFail(): void;
   onOpenFile?(project: string, rel: string, line?: number, accessToken?: string): void;
   onSave(): void;
+  /** Rich holds (true) or released (false) an edit the file lacks. */
+  onRichHeldChange?(held: boolean): void;
   onMount: ComponentProps<typeof SharedEditorSurface>['onMount'];
   onRelease: ComponentProps<typeof SharedEditorSurface>['onRelease'];
 }) {
   const showRendered = viewMode === 'rendered' && viewKind !== null && (viewKind !== 'svg' || Boolean(preview));
   const renderedText = viewSnapshot ?? load.content;
   const delimiter = delimiterForPath(relPath);
-  const showRich = viewMode === 'rich' && viewKind === 'markdown';
+  // An edit Rich holds but the file does not have yet keeps Rich in view
+  // (with its notice) until it is written or explicitly discarded.
+  const [richHeld, setRichHeld] = useState(false);
+  const showRich = (viewMode === 'rich' || richHeld) && viewKind === 'markdown';
   const markdownShown = viewKind === 'markdown' && (showRendered || showRich);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const { headings, activeId } = useMarkdownOutline(surfaceRef, markdownShown && tocOpen, !showRich);
@@ -102,6 +108,10 @@ export function EditorPaneTextBody({
                   onSave={onSave}
                   onOpenFile={onOpenFile}
                   onUnsupported={onRichUnsupported}
+                  onHeldChange={(held) => {
+                    setRichHeld(held);
+                    onRichHeldChange?.(held);
+                  }}
                 />
               </Suspense>
             ) : (

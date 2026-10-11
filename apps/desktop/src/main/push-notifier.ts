@@ -65,6 +65,9 @@ interface PushNotifier {
 
 interface PushNotifierOptions {
   store: PushSubscriptionStore;
+  /** Relay device id of this PC; native payloads carry it so the phone can
+   *  bind notification actions to the host that sent them. */
+  hostId?: string;
   /** Off by default; the user opts in per browser from Settings. */
   isEnabled(): boolean;
   readFinalAnswer(sessionId: string, startedAt: number): Promise<SessionFinalAnswer | null>;
@@ -184,6 +187,7 @@ export function createPushNotifier(options: PushNotifierOptions): PushNotifier {
           sessionId: completion.sessionId,
           reason,
           ...(approvalId ? { approvalId: approvalId.slice(0, 120) } : {}),
+          ...(options.hostId ? { hostId: options.hostId.slice(0, 64) } : {}),
         };
         const sent = native.send({
           platform: subscription.platform,

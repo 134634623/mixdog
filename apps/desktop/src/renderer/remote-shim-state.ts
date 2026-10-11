@@ -30,27 +30,21 @@ import {
   REMOTE_PAIRING_STORAGE_KEYS,
   canReuseStoredRemoteClientRegistration,
   clearStoredRemotePairing,
+  migrateLegacyRemotePairing,
   normalizeRemoteRelayOrigin,
   readRemoteDeviceId,
+  remotePairingKeys,
+  type RemotePairingKeys,
 } from './remote-pairing-recovery';
 import { createRemoteSessionInbox } from './remote-session-inbox';
 import { createRelayPayloadLimits, showRemoteToast, type PendingCall } from './remote-shim-payload-limit';
 import type { createRemotePairingScreen } from './remote-pairing-screen';
 import type { createRemoteViewSync } from './remote-view-sync';
 
-export const TOKEN_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.token;
-export const SERVER_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.server;
-export const BROWSER_ID_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.browserId;
 export const DEVICE_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.device;
 export const REMOTE_CREDENTIAL_READY_EVENT = 'mixdog:remote-credential-ready';
 export const REMOTE_CONNECTION_READY_EVENT = 'mixdog:remote-connection-ready';
 export const REMOTE_PAIRING_INVALID_EVENT = 'mixdog:remote-pairing-invalid';
-// Sticky proof that this pairing has worked at least once. Without it a browser
-// reopened while the desktop sleeps counts three quick retries and throws the
-// pairing screen over a perfectly valid pairing.
-export const PAIRED_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.paired;
-export const E2EE_PUBLIC_KEY_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.e2eePublicKey;
-export const E2EE_SECRET_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.e2eeSecret;
 export const VISIBLE_SESSIONS_STORAGE_KEY = 'mixdog.remote-visible-sessions';
 export const LAST_SESSION_STORAGE_KEY = 'mixdog.desktop-last-session.v1';
 export const MAX_RESTORED_VISIBLE_SESSIONS = 8;
@@ -59,6 +53,8 @@ export const MAX_RESTORED_VISIBLE_SESSIONS = 8;
 export interface RemoteShimState {
   serverBase: string;
   deviceId: string;
+  /** Storage keys of THIS relay origin + device's pairing. */
+  pairingKeys: RemotePairingKeys;
   token: string;
   e2eePairing: RelayE2EEPairingMaterial | null;
   browserId: string;
@@ -270,13 +266,18 @@ export const createRemoteShimContext = (): RemoteShimContext => {
   // landed outside the route.
   let serverBase = '';
   let deviceId = '';
+  let keys = remotePairingKeys(location.origin, '');
   try {
-    const storedServer = localStorage.getItem(SERVER_STORAGE_KEY) || '';
+    // Before the device label is overwritten by this route: credentials from
+    // before namespacing belong to the device that label names.
+    migrateLegacyRemotePairing(localStorage, location.origin);
+    deviceId = readRemoteDeviceId(location.pathname, document.cookie) || localStorage.getItem(DEVICE_STORAGE_KEY) || '';
+    keys = remotePairingKeys(location.origin, deviceId);
+    const storedServer = localStorage.getItem(keys.server) || '';
     serverBase = normalizeRemoteRelayOrigin(storedServer) || location.origin;
     if (storedServer && !normalizeRemoteRelayOrigin(storedServer)) {
-      clearStoredRemotePairing(localStorage);
+      clearStoredRemotePairing(localStorage, keys);
     }
-    deviceId = readRemoteDeviceId(location.pathname, document.cookie) || localStorage.getItem(DEVICE_STORAGE_KEY) || '';
     if (deviceId) localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
   } catch {
     /* entry screen */
@@ -289,9 +290,9 @@ export const createRemoteShimContext = (): RemoteShimContext => {
   let e2eePublicKey = '';
   let e2eeSecret = '';
   try {
-    token = localStorage.getItem(TOKEN_STORAGE_KEY) || '';
-    e2eePublicKey = localStorage.getItem(E2EE_PUBLIC_KEY_STORAGE_KEY) || '';
-    e2eeSecret = localStorage.getItem(E2EE_SECRET_STORAGE_KEY) || '';
+    token = localStorage.getItem(keys.token) || '';
+    e2eePublicKey = localStorage.getItem(keys.e2eePublicKey) || '';
+    e2eeSecret = localStorage.getItem(keys.e2eeSecret) || '';
   } catch {
     /* token stays empty; the entry screen asks for approval */
   }
@@ -299,14 +300,14 @@ export const createRemoteShimContext = (): RemoteShimContext => {
     e2eePublicKey && e2eeSecret ? { version: 1, serverPublicKey: e2eePublicKey, pairingSecret: e2eeSecret } : null;
   let browserId = '';
   try {
-    browserId = localStorage.getItem(BROWSER_ID_STORAGE_KEY) || newBrowserId();
-    localStorage.setItem(BROWSER_ID_STORAGE_KEY, browserId);
+    browserId = localStorage.getItem(keys.browserId) || newBrowserId();
+    localStorage.setItem(keys.browserId, browserId);
   } catch {
     browserId = newBrowserId();
   }
   let everPaired = false;
   try {
-    everPaired = localStorage.getItem(PAIRED_STORAGE_KEY) === '1';
+    everPaired = localStorage.getItem(keys.paired) === '1';
   } catch {
     /* no storage */
   }
@@ -319,6 +320,7 @@ export const createRemoteShimContext = (): RemoteShimContext => {
   const state: RemoteShimState = {
     serverBase,
     deviceId,
+    pairingKeys: keys,
     token,
     e2eePairing,
     browserId,
