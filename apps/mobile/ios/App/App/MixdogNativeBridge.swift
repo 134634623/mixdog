@@ -104,10 +104,6 @@ final class MixdogNavigationDelegate: NSObject, WKNavigationDelegate {
                 ?? decisionHandler(.allow)
             return
         }
-        #if DEBUG
-        NSLog("[mixdog] navigate %@ allowed=%d saved=%@", url.absoluteString,
-              MixdogOriginPolicy.isAllowed(url: url) ? 1 : 0, MixdogOriginPolicy.saved.joined(separator: ","))
-        #endif
         if url.scheme == "about" || MixdogOriginPolicy.isAllowed(url: url) {
             decisionHandler(.allow)
             return
@@ -140,15 +136,8 @@ final class MixdogNativeBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
     func userScript() -> WKUserScript {
         let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
         let allowed = Array(MixdogOriginPolicy.bundled) + MixdogOriginPolicy.saved
-        #if DEBUG
-        let probe = "try { window.webkit.messageHandlers.\(Self.handlerName).postMessage({ method: 'diag', "
-            + "args: { origin: String(window.location.origin), href: String(window.location.href) } }); } catch (e) {}"
-        #else
-        let probe = ""
-        #endif
         let source = """
         (function () {
-          \(probe)
           if (window.mixdogNative || \(Self.jsList(allowed)).indexOf(window.location.origin) < 0) return;
           var post = function (method, args) {
             return window.webkit.messageHandlers.\(Self.handlerName).postMessage({ method: method, args: args || {} });
@@ -232,11 +221,6 @@ final class MixdogNativeBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
         didReceive message: WKScriptMessage,
         replyHandler: @escaping (Any?, String?) -> Void
     ) {
-        #if DEBUG
-        NSLog("[mixdog] message %@ frameOrigin=%@ main=%d", String(describing: message.body),
-              MixdogOriginPolicy.origin(of: message.frameInfo.securityOrigin) ?? "nil",
-              message.frameInfo.isMainFrame ? 1 : 0)
-        #endif
         // Only the main frame of an allowed origin gets an answer.
         guard message.frameInfo.isMainFrame,
               let origin = MixdogOriginPolicy.origin(of: message.frameInfo.securityOrigin),
