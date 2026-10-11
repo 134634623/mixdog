@@ -341,7 +341,9 @@ export function OAuthControl({
                 <h3 id={`settings-oauth-title-${providerId}`}>{loginLabel}</h3>
                 <p id={`settings-oauth-description-${providerId}`}>
                   {remote && flow.manualCodeSupported
-                    ? t('Sign in on the opened page. When it ends on a page that cannot load, paste that page address here.')
+                    ? t(
+                        'Sign in on the opened page. When it ends on a page that cannot load, paste that page address here.'
+                      )
                     : manualCodeFlow
                       ? t('Complete the browser login, then paste the authorization code.')
                       : t('Finish signing in in your browser. This window updates automatically.')}

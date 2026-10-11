@@ -38,7 +38,14 @@ function bridgePresent(file) {
   }
 }
 
-export const INSTALLABLE_BUILTIN_IDS = Object.freeze(['git', 'memory', 'office', 'tidy', 'localProvider', 'autoEffort']);
+export const INSTALLABLE_BUILTIN_IDS = Object.freeze([
+  'git',
+  'memory',
+  'office',
+  'tidy',
+  'localProvider',
+  'autoEffort',
+]);
 const GRANDFATHERED_BUILTIN_IDS = Object.freeze(['git', 'memory', 'office']);
 
 /** Model-facing activation for one gated feature: an explicit MIXDOG_FEATURE_*
@@ -119,7 +126,13 @@ export function builtinFeatureActive(configLike, id) {
  *  overrides), which the caller passes in. */
 export function featureDisallowedToolsFor(
   configLike,
-  { browserAvailable = false, computerAvailable = false, terminalAvailable = false, toolProfile = 'interactive', gitAvailable } = {}
+  {
+    browserAvailable = false,
+    computerAvailable = false,
+    terminalAvailable = false,
+    toolProfile = 'interactive',
+    gitAvailable,
+  } = {}
 ) {
   const browser = featureEnvOverride('MIXDOG_FEATURE_BROWSER') ?? browserAvailable === true;
   const computer = featureEnvOverride('MIXDOG_FEATURE_COMPUTER') ?? computerAvailable === true;

@@ -220,7 +220,9 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
     try {
       const paired = await control.request<DesktopRemoteClientInfo[]>('list-clients');
       name = Array.isArray(paired)
-        ? String(paired.find((entry) => entry.id === credentialId)?.name || '').trim().slice(0, 80)
+        ? String(paired.find((entry) => entry.id === credentialId)?.name || '')
+            .trim()
+            .slice(0, 80)
         : '';
     } catch {
       name = '';
@@ -256,8 +258,9 @@ export async function startRemoteRelay(options: RemoteRelayOptions): Promise<Rem
           credentialId: () => state.credentialId,
           deviceName: () => deviceNameFor(state.credentialId),
           staleView: (sessionId, device) => {
-            const held = (state.sessionStateEncoders.get(sessionId)?.resumePoint()?.held as { items?: unknown[] } | null)
-              ?.items;
+            const held = (
+              state.sessionStateEncoders.get(sessionId)?.resumePoint()?.held as { items?: unknown[] } | null
+            )?.items;
             const stale = viewIsStale(held, sessionStates.latestItems(sessionId), device);
             if (stale) sessionStates.refresh(sessionId);
             return stale;

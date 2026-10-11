@@ -67,8 +67,9 @@ export function EditorPaneTextBody({
   onFail(): void;
   onOpenFile?(project: string, rel: string, line?: number, accessToken?: string): void;
   onSave(): void;
-  /** Rich holds (true) or released (false) an edit the file lacks. */
-  onRichHeldChange?(held: boolean): void;
+  /** Rich holds (true) or released (false) an edit the file lacks;
+   *  `heldText` reads the file as it would be with that edit. */
+  onRichHeldChange?(held: boolean, heldText?: () => string | null): void;
   onMount: ComponentProps<typeof SharedEditorSurface>['onMount'];
   onRelease: ComponentProps<typeof SharedEditorSurface>['onRelease'];
 }) {
@@ -108,9 +109,9 @@ export function EditorPaneTextBody({
                   onSave={onSave}
                   onOpenFile={onOpenFile}
                   onUnsupported={onRichUnsupported}
-                  onHeldChange={(held) => {
+                  onHeldChange={(held, heldText) => {
                     setRichHeld(held);
-                    onRichHeldChange?.(held);
+                    onRichHeldChange?.(held, heldText);
                   }}
                 />
               </Suspense>

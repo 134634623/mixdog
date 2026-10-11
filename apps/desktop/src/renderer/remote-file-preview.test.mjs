@@ -26,7 +26,13 @@ function fakeHost(files) {
     if (method === 'previewProjectFile') return { kind: 'video', mime: file.mime, mtimeMs: 1, size: file.bytes.length };
     const [, , , offset, length] = params;
     const slice = file.bytes.subarray(offset, offset + length);
-    return { data: Buffer.from(slice).toString('base64'), mime: file.mime, offset, size: file.bytes.length, mtimeMs: 1 };
+    return {
+      data: Buffer.from(slice).toString('base64'),
+      mime: file.mime,
+      offset,
+      size: file.bytes.length,
+      mtimeMs: 1,
+    };
   };
   return { call, calls };
 }
@@ -37,7 +43,10 @@ test('large files are read in several bounded ranges', async () => {
   const host = fakeHost({ 'a.mp4': { bytes, mime: 'video/mp4' } });
   const read = await readRemoteFile(host.call, ['p', 'a.mp4', null], bytes.length);
   assert.equal(read.size, bytes.length);
-  assert.deepEqual(host.calls.map((c) => c[4]), [0, REMOTE_PREVIEW_CHUNK_BYTES, REMOTE_PREVIEW_CHUNK_BYTES * 2]);
+  assert.deepEqual(
+    host.calls.map((c) => c[4]),
+    [0, REMOTE_PREVIEW_CHUNK_BYTES, REMOTE_PREVIEW_CHUNK_BYTES * 2]
+  );
   await assert.rejects(readRemoteFile(host.call, ['p', 'a.mp4', null], 10), /too large/);
 });
 
@@ -83,7 +92,10 @@ test('a host with the media lane is previewed by streaming, with no RPC range re
       return new Response(null, { status: 206 });
     },
     async () => {
-      const api = createRemotePreviewApi(call, (assetId, variant) => `https://relay.test/media/${assetId}?variant=${variant}&sid=s`);
+      const api = createRemotePreviewApi(
+        call,
+        (assetId, variant) => `https://relay.test/media/${assetId}?variant=${variant}&sid=s`
+      );
       const preview = await api.previewProjectFile('p', 'big.mp4');
       assert.equal(preview.url, 'https://relay.test/media/aaaaaaaa-1111?variant=original&sid=s');
       assert.equal(preview.kind, 'video');
@@ -99,7 +111,8 @@ test('an older host, a missing lane, or a lane that does not answer keeps the RP
   globalThis.URL.revokeObjectURL = () => {};
   const bytes = Buffer.from('hello');
   const hostCall = (extra) => async (method, params) => {
-    if (method === 'previewProjectFile') return { kind: 'video', mime: 'video/mp4', mtimeMs: 1, size: bytes.length, ...extra };
+    if (method === 'previewProjectFile')
+      return { kind: 'video', mime: 'video/mp4', mtimeMs: 1, size: bytes.length, ...extra };
     const [, , , offset, length] = params;
     return {
       data: bytes.subarray(offset, offset + length).toString('base64'),

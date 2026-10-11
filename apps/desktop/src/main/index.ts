@@ -72,11 +72,7 @@ import {
   initialTitleBarWindowOverrides,
   installDesktopWindowMaterial,
 } from './window-options';
-import {
-  DESKTOP_IPC,
-  type DesktopRemoteAccessInfo,
-  type DesktopSettings,
-} from '../shared/contract';
+import { DESKTOP_IPC, type DesktopRemoteAccessInfo, type DesktopSettings } from '../shared/contract';
 import { BROWSER_REMOTE_METHODS, runBrowserRemoteRequest, type BrowserRemoteMethod } from './remote-browser-methods';
 import { persistWindowState, readWindowState } from './window-state';
 import {
@@ -811,22 +807,19 @@ function startDiagnosticsEventLoopMonitor(): void {
 }
 
 function installDesktopMenu(): void {
-  installNativeMenu(
-    Boolean(process.env.ELECTRON_RENDERER_URL),
-    {
-      // The OS window stays in Electron; the daemon owns both remote transports.
-      showRemoteAccess: () => {
-        void (async () => {
-          const info = await remoteAccessInfo();
-          if (!info) return;
-          const { showRemoteAccessWindow } = await import('./remote-access-window');
-          await showRemoteAccessWindow(info, mainWindow);
-        })().catch((error: unknown) => {
-          console.error('Failed to open the remote access window:', error);
-        });
-      },
-    }
-  );
+  installNativeMenu(Boolean(process.env.ELECTRON_RENDERER_URL), {
+    // The OS window stays in Electron; the daemon owns both remote transports.
+    showRemoteAccess: () => {
+      void (async () => {
+        const info = await remoteAccessInfo();
+        if (!info) return;
+        const { showRemoteAccessWindow } = await import('./remote-access-window');
+        await showRemoteAccessWindow(info, mainWindow);
+      })().catch((error: unknown) => {
+        console.error('Failed to open the remote access window:', error);
+      });
+    },
+  });
 }
 
 function startDeferredDesktopServices(): Promise<void> {
@@ -874,11 +867,10 @@ async function revokeRemoteAccessClient(clientId: string): Promise<DesktopRemote
 let remoteHostWindows: Promise<RemoteHostWindows> | null = null;
 function remoteHostsHandle(): RemoteHostWindows {
   const ready = (remoteHostWindows ??= (async () => {
-    const [{ loadRemoteHostStore }, { createRemoteHostWindows }] = await Promise.all([
+    const [{ loadRemoteHostStore, relayHttpOrigin }, { createRemoteHostWindows }] = await Promise.all([
       import('./remote-hosts'),
       import('./remote-host-windows'),
     ]);
-    const { relayHttpOrigin } = await import('./remote-hosts');
     const { resolveRelayUrl } = await import('./remote-relay-device');
     return createRemoteHostWindows(
       await loadRemoteHostStore(desktopUserData),
@@ -1503,7 +1495,7 @@ async function createWindow(): Promise<void> {
     remoteAccessInfo,
     rotateRemoteAccess,
     revokeRemoteAccessClient,
-      remoteHosts: remoteHostsHandle(),
+    remoteHosts: remoteHostsHandle(),
   });
   diagnostics?.write('window-created', {
     totalMs: Date.now() - startupStartedAt,
@@ -1645,7 +1637,9 @@ if (!app.requestSingleInstanceLock()) {
       // stamp its start into the timeline now that the sink exists.
       reportDaemonServiceStart();
       void settingsStore.separateDefaults(mixdogDataDirectory()).catch((error: unknown) => {
-        diagnostics?.write('defaults-separation-failed', { message: error instanceof Error ? error.message : String(error) });
+        diagnostics?.write('defaults-separation-failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
       });
       for (const { event, entry, at } of earlyDiagnostics.splice(0)) {
         diagnostics.write(event, { ...entry, occurredAt: at });

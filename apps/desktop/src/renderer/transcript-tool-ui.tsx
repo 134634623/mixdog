@@ -469,6 +469,7 @@ function renderToolActivityHeader({
   // The row is a plain container: the disclosure is a stretched sibling
   // button and the file link a separate button, so controls never nest.
   // Clicks on the row's text reach the container and toggle like before.
+  const metaLine = open && presentation.hasDetails ? toolActivityMetaLine(presentation) : '';
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the stretched sibling button is the keyboard path; this click only widens the target.
     // biome-ignore lint/a11y/useKeyWithClickEvents: same as above.
@@ -512,9 +513,7 @@ function renderToolActivityHeader({
             </small>
           )}
       </span>
-      {open && presentation.hasDetails && toolActivityMetaLine(presentation) && (
-        <span className="tool-activity-item-meta">{toolActivityMetaLine(presentation)}</span>
-      )}
+      {metaLine && <span className="tool-activity-item-meta">{metaLine}</span>}
       <ToolRowOutcome presentation={presentation} />
       {presentation.pending && <ToolWorkingStatus startedAt={startedAt} spark />}
       {presentation.pending && (
@@ -533,7 +532,8 @@ function renderToolActivityHeader({
 
 const PREVIEW_OUTPUT_LINES = 5;
 // Every box a preview may cut short: plates, the command, plain output.
-const PREVIEW_CUT_SELECTOR = '.tool-panel-body, .tool-panel[data-kind="command"] .tool-code, .tool-activity-item-output';
+const PREVIEW_CUT_SELECTOR =
+  '.tool-panel-body, .tool-panel[data-kind="command"] .tool-code, .tool-activity-item-output';
 
 type ToolActivityPreviewMode = 'lines' | 'height';
 
@@ -830,7 +830,9 @@ function ToolActivityItem({
       data-expanded={expanded ? 'true' : 'false'}
     >
       {renderToolActivityHeader({ presentation, open, onToggle, contentId, startedAt: toolItemStartedAt(item) })}
-      {rendered && presentation.hasDetails && renderToolActivityDetails(presentation, contentId, chosen ? null : keepOpen)}
+      {rendered &&
+        presentation.hasDetails &&
+        renderToolActivityDetails(presentation, contentId, chosen ? null : keepOpen)}
     </article>
   );
 }

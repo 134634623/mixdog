@@ -6,13 +6,7 @@ import { randomUUID } from 'node:crypto';
 
 import { clientProfile } from './device-store.mjs';
 import { isRoutingId } from './ids.mjs';
-import {
-  browserSocketOriginAllowed,
-  clientIp,
-  decodedRequestPath,
-  desktopLegOpen,
-  requestUrl,
-} from './relay-http.mjs';
+import { browserSocketOriginAllowed, clientIp, decodedRequestPath, desktopLegOpen, requestUrl } from './relay-http.mjs';
 import { pairingCookieHeaders, parseCookieToken } from './static-http.mjs';
 
 export const MAX_PENDING_CLAIMS = 64;
@@ -285,7 +279,12 @@ export async function handleClaimRequest(context, request, response) {
 
 // Desktop online, no duplicate request, quota available: record the claim
 // and ask the desktop for approval.
-function startClaim({ liveDesktops, claims, json, pairCodes }, { deviceId, clientId, publicKey, ticket }, profile, source) {
+function startClaim(
+  { liveDesktops, claims, json, pairCodes },
+  { deviceId, clientId, publicKey, ticket },
+  profile,
+  source
+) {
   const entry = liveDesktops.get(deviceId);
   if (!desktopLegOpen(entry)) {
     json(503, { status: 'offline' });

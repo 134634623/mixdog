@@ -13,8 +13,6 @@ import {
 } from '../../runtime/agent/orchestrator/providers/api-usage.mjs';
 import { num } from '../../runtime/agent/orchestrator/providers/lib/usage-primitives.mjs';
 import { readProviderAccountPool } from '../../runtime/shared/provider-accounts.mjs';
-
-const CREDIT_PROVIDERS = new Set(['openai-oauth', 'anthropic-oauth']);
 import {
   creditsFromSnapshot,
   applyApiUnavailable,
@@ -34,6 +32,8 @@ import {
   snapshotUsage,
   usageDashboardSnapshot,
 } from './usage-dashboard-model.mjs';
+
+const CREDIT_PROVIDERS = new Set(['openai-oauth', 'anthropic-oauth']);
 
 async function oauthSnapshot(providerId, { refresh, getProvider, log }) {
   const cached = readCachedOAuthUsageSnapshot({ provider: providerId, model: '' });

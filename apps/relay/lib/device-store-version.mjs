@@ -9,7 +9,9 @@ const SEEN_REFRESH_MS = 60 * 60 * 1000;
 
 function cleanReport(report) {
   const appVersion = DESKTOP_VERSION.test(String(report?.appVersion || '')) ? String(report.appVersion) : '';
-  const rendererRelease = SHELL_VERSION.test(String(report?.rendererRelease || '')) ? String(report.rendererRelease) : '';
+  const rendererRelease = SHELL_VERSION.test(String(report?.rendererRelease || ''))
+    ? String(report.rendererRelease)
+    : '';
   return { appVersion, rendererRelease };
 }
 

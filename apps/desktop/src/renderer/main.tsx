@@ -9,6 +9,7 @@
 import './process-shim';
 import { installShellUpdateState, recoverShellBootstrap } from './shell-update-state';
 import { preloadMarkdownBody } from './markdown-body-loader';
+import { installTouchGestures } from './touch-gestures';
 // Browser-served remote sessions install a WebSocket-backed DesktopApi before
 // any module reads window.mixdogDesktop; inside Electron the preload bridge
 // already exists and this is a no-op.
@@ -44,6 +45,7 @@ if (remoteBrowser) {
 }
 
 if (launchApplication) {
+  installTouchGestures();
   // Start the settled transcript renderer after its HTML hint has queued the
   // shell-critical chunks first. The separate streaming parser Worker and
   // secondary dialogs remain lazy, so an existing Markdown conversation is

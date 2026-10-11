@@ -76,6 +76,7 @@ export function createRelaySessionWiring(deps: RelaySessionWiringDeps): RelaySes
     resyncClient,
     broadcastState,
     start: () => {
+      const { nativePush } = deps;
       const pushNotifier = createPushNotifier({
         store: deps.pushStore,
         ...(deps.hostId ? { hostId: deps.hostId } : {}),
@@ -91,10 +92,10 @@ export function createRelaySessionWiring(deps: RelaySessionWiringDeps): RelaySes
           }
           return false;
         },
-        ...(deps.nativePush
+        ...(nativePush
           ? {
               native: {
-                list: () => deps.nativePush!.store.list(),
+                list: () => nativePush.store.list(),
                 // A native client is a paired credential; any live leg of it
                 // that has not gone to the background is watching.
                 isClientForeground: (clientId: string) => {
@@ -103,8 +104,8 @@ export function createRelaySessionWiring(deps: RelaySessionWiringDeps): RelaySes
                   }
                   return false;
                 },
-                send: (message: NativePushMessage) => deps.nativePush!.send(message),
-                removeByClient: (clientId: string) => deps.nativePush!.store.removeByClient(clientId),
+                send: (message: NativePushMessage) => nativePush.send(message),
+                removeByClient: (clientId: string) => nativePush.store.removeByClient(clientId),
               },
             }
           : {}),

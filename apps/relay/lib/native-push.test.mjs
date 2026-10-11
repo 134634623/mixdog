@@ -14,7 +14,7 @@ const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const P8 = ec.privateKey.export({ type: 'pkcs8', format: 'pem' });
 const APNS_ENV = { APNS_KEY_P8: P8, APNS_KEY_ID: 'KEYID12345', APNS_TEAM_ID: 'TEAMID1234' };
 const APNS_TOKEN = 'ab'.repeat(32);
-const FCM_TOKEN = 'f'.repeat(40) + ':APA91b-token_x';
+const FCM_TOKEN = `${'f'.repeat(40)}:APA91b-token_x`;
 const serviceAccount = (extra = {}) =>
   JSON.stringify({
     project_id: 'mixdog-test',
@@ -27,6 +27,10 @@ const serviceAccount = (extra = {}) =>
 async function apnsServer(respond) {
   const requests = [];
   const server = http2.createServer();
+  const connections = { count: 0 };
+  server.on('session', () => {
+    connections.count += 1;
+  });
   server.on('stream', (stream, headers) => {
     const chunks = [];
     stream.on('data', (chunk) => chunks.push(chunk));
@@ -38,7 +42,7 @@ async function apnsServer(respond) {
     });
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  return { requests, origin: `http://127.0.0.1:${server.address().port}`, close: () => server.close() };
+  return { requests, connections, origin: `http://127.0.0.1:${server.address().port}`, close: () => server.close() };
 }
 
 const message = (extra = {}) => ({
@@ -55,7 +59,10 @@ test('no credentials: no platform is advertised and sends fail gracefully', asyn
   const push = createNativePush({ env: {} });
   assert.deepEqual(push.platforms, []);
   assert.equal((await push.send(message())).ok, false);
-  const broken = createNativePush({ env: { APNS_KEY_P8: 'not a key', APNS_KEY_ID: 'a', APNS_TEAM_ID: 'b' }, log: () => {} });
+  const broken = createNativePush({
+    env: { APNS_KEY_P8: 'not a key', APNS_KEY_ID: 'a', APNS_TEAM_ID: 'b' },
+    log: () => {},
+  });
   assert.deepEqual(broken.platforms, []);
 });
 
@@ -85,14 +92,19 @@ test('APNs request shape: token auth, headers, mutable-content, approval categor
   assert.deepEqual(JSON.parse(Buffer.from(header, 'base64url')), { alg: 'ES256', kid: 'KEYID12345' });
   assert.equal(JSON.parse(Buffer.from(claims, 'base64url')).iss, 'TEAMID1234');
   const verifier = createVerify('sha256').update(`${header}.${claims}`);
-  assert.equal(verifier.verify({ key: ec.publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')), true);
+  assert.equal(
+    verifier.verify({ key: ec.publicKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')),
+    true
+  );
   // The provider token is reused, not re-signed per push.
   assert.equal(ordinary.headers.authorization, approval.headers.authorization);
 });
 
 test('APNs 410 reports the token invalid; other failures do not', async (t) => {
   const apns = await apnsServer((count) =>
-    count === 1 ? { status: 410, body: { reason: 'Unregistered' } } : { status: 429, body: { reason: 'TooManyRequests' } }
+    count === 1
+      ? { status: 410, body: { reason: 'Unregistered' } }
+      : { status: 429, body: { reason: 'TooManyRequests' } }
   );
   const push = createNativePush({ env: APNS_ENV, origins: { apnsProduction: apns.origin } });
   t.after(() => {
@@ -125,6 +137,51 @@ test('APNs sandbox tokens go to the sandbox host', async (t) => {
   assert.equal(production.requests.length, 1);
 });
 
+test('APNs reuses one connection and provider JWT until the JWT expires or is refused', async (t) => {
+  const apns = await apnsServer((count) =>
+    count === 3 ? { status: 403, body: { reason: 'ExpiredProviderToken' } } : { status: 200 }
+  );
+  let clock = 1_000_000_000_000;
+  const push = createNativePush({ env: APNS_ENV, origins: { apnsProduction: apns.origin }, now: () => clock });
+  t.after(() => {
+    push.close();
+    apns.close();
+  });
+  await push.send(message());
+  await push.send(message());
+  assert.equal(apns.connections.count, 1);
+  const [first, second] = apns.requests;
+  assert.equal(second.headers.authorization, first.headers.authorization);
+  // Past the 40 minute TTL a new JWT is signed.
+  clock += 41 * 60_000;
+  await push.send(message());
+  const [, , third] = apns.requests;
+  assert.notEqual(third.headers.authorization, first.headers.authorization);
+  // The 403 answering the third request invalidates the cached JWT.
+  assert.equal(apns.requests.length, 3);
+  clock += 1000;
+  await push.send(message());
+  assert.notEqual(apns.requests[3].headers.authorization, third.headers.authorization);
+  assert.equal(apns.connections.count, 1);
+});
+
+test('APNs close() closes its connections and a later send reconnects', async (t) => {
+  const apns = await apnsServer(() => ({ status: 200 }));
+  const push = createNativePush({ env: APNS_ENV, origins: { apnsProduction: apns.origin } });
+  t.after(() => {
+    push.close();
+    apns.close();
+  });
+  await push.send(message());
+  assert.equal(apns.connections.count, 1);
+  push.close();
+  await push.send(message());
+  assert.equal(apns.connections.count, 2);
+  // Nothing was connected for a relay that never sent.
+  createNativePush({ env: APNS_ENV, origins: { apnsProduction: apns.origin } }).close();
+  assert.equal(apns.connections.count, 2);
+});
+
 function fcmFetch(sendResponse) {
   const calls = [];
   const fetchImpl = async (url, init) => {
@@ -149,7 +206,10 @@ test('FCM request shape: service-account JWT exchange, data-only high priority m
   const exchange = new URLSearchParams(calls[0].init.body);
   assert.equal(exchange.get('grant_type'), 'urn:ietf:params:oauth:grant-type:jwt-bearer');
   const [header, claims, signature] = exchange.get('assertion').split('.');
-  assert.equal(JSON.parse(Buffer.from(claims, 'base64url')).scope, 'https://www.googleapis.com/auth/firebase.messaging');
+  assert.equal(
+    JSON.parse(Buffer.from(claims, 'base64url')).scope,
+    'https://www.googleapis.com/auth/firebase.messaging'
+  );
   assert.equal(
     createVerify('RSA-SHA256').update(`${header}.${claims}`).verify(rsa.publicKey, Buffer.from(signature, 'base64url')),
     true
@@ -163,6 +223,26 @@ test('FCM request shape: service-account JWT exchange, data-only high priority m
   assert.equal(body.android.priority, 'HIGH');
   assert.equal(body.android.collapse_key, 'collapse-1');
   assert.equal(body.notification, undefined);
+});
+
+test('FCM access token is cached until near expiry or a 401', async () => {
+  let clock = 1_000_000_000_000;
+  let status = 200;
+  const { calls, fetchImpl } = fcmFetch(() => Response.json({}, { status }));
+  const push = createNativePush({ env: { FCM_SERVICE_ACCOUNT_JSON: serviceAccount() }, fetchImpl, now: () => clock });
+  const exchanges = () => calls.filter((call) => call.url.includes('oauth.example.test')).length;
+  assert.equal(exchanges(), 0);
+  await push.send(message({ platform: 'fcm', token: FCM_TOKEN }));
+  await push.send(message({ platform: 'fcm', token: FCM_TOKEN }));
+  assert.equal(exchanges(), 1);
+  clock += 3600_000 - 30_000;
+  await push.send(message({ platform: 'fcm', token: FCM_TOKEN }));
+  assert.equal(exchanges(), 2);
+  status = 401;
+  await push.send(message({ platform: 'fcm', token: FCM_TOKEN }));
+  status = 200;
+  await push.send(message({ platform: 'fcm', token: FCM_TOKEN }));
+  assert.equal(exchanges(), 3);
 });
 
 test('FCM UNREGISTERED reports the token invalid', async () => {
@@ -243,7 +323,13 @@ const send = (extra = {}) => ({
   sandbox: false,
   ...extra,
 });
-const bind = (extra = {}) => ({ type: 'native-push-bind', clientId: 'client-1', platform: 'apns', token: APNS_TOKEN, ...extra });
+const bind = (extra = {}) => ({
+  type: 'native-push-bind',
+  clientId: 'client-1',
+  platform: 'apns',
+  token: APNS_TOKEN,
+  ...extra,
+});
 
 test('only the desktop that bound a token to its own paired client can send to it', async () => {
   const store = clientsOf({ 'dev-a': ['client-1'], 'dev-b': ['client-9'] });
@@ -327,7 +413,10 @@ test('sends are validated and rate limited per device', async () => {
   a.emit(send({ reason: 'weird' }));
   a.emit(send({ collapseKey: 'bad key!' }));
   await settle();
-  assert.deepEqual(a.socket.sent.slice(-3).map((m) => m.error), ['invalid-message', 'invalid-message', 'invalid-message']);
+  assert.deepEqual(
+    a.socket.sent.slice(-3).map((m) => m.error),
+    ['invalid-message', 'invalid-message', 'invalid-message']
+  );
   a.emit(send());
   a.emit(send());
   a.emit(send());

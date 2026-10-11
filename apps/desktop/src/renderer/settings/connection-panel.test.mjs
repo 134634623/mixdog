@@ -45,7 +45,9 @@ test('a displayed QR and its cache clear on disconnect and return after the auto
   assert.deepEqual(getCachedConnectionInfo(api), fresh);
 });
 
-test('the pairing card shows the QR and a 6-digit code with no link field; the other-PC tab takes a code', async (t) => {
+const tabNamed = (document, name) => [...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent === name);
+
+test('Phone app shows only the QR; Web and Other PC share one 6-digit code with no QR or link', async (t) => {
   const { root, document } = installTestDom(t, { rootId: 'root' });
   const connected = [];
   const released = [];
@@ -54,7 +56,9 @@ test('the pairing card shows the QR and a 6-digit code with no link field; the o
     getRemotePairCode: (action) => {
       if (action === 'release') released.push(action);
       return Promise.resolve(
-        action === 'release' ? null : { code: action === 'renew' ? '111222' : '482917', expiresAt: Date.now() + 200_000 }
+        action === 'release'
+          ? null
+          : { code: action === 'renew' ? '111222' : '482917', expiresAt: Date.now() + 200_000 }
       );
     },
     listRemoteHosts: () =>
@@ -68,10 +72,18 @@ test('the pairing card shows the QR and a 6-digit code with no link field; the o
   await act(async () => root.render(React.createElement(ConnectionPanel, { api })));
 
   const tabs = [...document.querySelectorAll('[role="tab"]')];
-  assert.equal(tabs.length, 2);
+  assert.deepEqual(
+    tabs.map((tab) => tab.textContent),
+    ['Mobile', 'Web', 'Other PC']
+  );
   assert.equal(tabs[0].getAttribute('aria-selected'), 'true');
   assert.ok(document.querySelector('.settings-connection-card svg[data-device="cccccccc"]'));
+  assert.equal(document.querySelector('.settings-pair-code'), null, 'the phone-app tab shows no code');
+
+  await act(async () => tabNamed(document, 'Web').click());
+  assert.equal(document.querySelector('.settings-connection-card svg'), null, 'no QR on the web tab');
   assert.equal(document.querySelector('.settings-pair-code b').textContent, '482·917');
+  assert.ok(document.body.textContent.includes('relay.example/connect'));
   assert.equal(document.querySelector('input[readonly]'), null, 'no pairing link field');
   assert.equal(document.querySelector('.settings-connection-link'), null);
   assert.ok(!document.body.textContent.includes('relay.example/d/'), 'the pairing URL is never shown');
@@ -80,8 +92,10 @@ test('the pairing card shows the QR and a 6-digit code with no link field; the o
   await act(async () => renew.click());
   assert.equal(document.querySelector('.settings-pair-code b').textContent, '111·222');
 
-  await act(async () => tabs[1].click());
-  assert.deepEqual(released, ['release'], 'the code is withdrawn when the screen leaves the tab');
+  await act(async () => tabNamed(document, 'Other PC').click());
+  assert.deepEqual(released, [], 'Web and Other PC keep the same code');
+  assert.equal(document.querySelector('.settings-pair-code b').textContent, '111·222');
+  assert.equal(document.querySelector('.settings-connection-card svg'), null);
   assert.ok(document.body.textContent.includes('Home PC'));
   const input = document.querySelector('input[name="code"]');
   assert.ok(input);
@@ -94,6 +108,9 @@ test('the pairing card shows the QR and a 6-digit code with no link field; the o
   const connect = [...document.querySelectorAll('button')].find((button) => button.textContent === 'Connect');
   await act(async () => connect.click());
   assert.deepEqual(connected, ['482917']);
+
+  await act(async () => tabNamed(document, 'Mobile').click());
+  assert.deepEqual(released, ['release'], 'the code is withdrawn when no tab shows it');
 });
 
 test('a pending code request (null) shows a loading state, not the unsupported note', async (t) => {
@@ -104,6 +121,7 @@ test('a pending code request (null) shows a loading state, not the unsupported n
   };
   setCachedConnectionInfo(api, readyInfo('ffffffff'));
   await act(async () => root.render(React.createElement(ConnectionPanel, { api })));
+  await act(async () => tabNamed(document, 'Web').click());
   assert.ok(document.body.textContent.includes('Getting a code…'));
   assert.ok(!document.body.textContent.includes("doesn't support codes"));
 });
@@ -121,39 +139,72 @@ for (const [label, answer] of [
     setCachedConnectionInfo(api, readyInfo('eeeeeeee'));
     await act(async () => root.render(React.createElement(ConnectionPanel, { api })));
     assert.ok(document.querySelector('.settings-connection-card svg[data-device="eeeeeeee"]'));
+    await act(async () => tabNamed(document, 'Web').click());
     assert.equal(document.querySelector('.settings-pair-code'), null);
     assert.equal(document.querySelector('.settings-pair-timer'), null);
     assert.ok(document.body.textContent.includes("This relay doesn't support codes yet — use the QR code"));
   });
 }
 
-test('connected devices show a kind icon, an online pill, dates and unpair', async (t) => {
+test('each tab lists the devices that connected its way, with a kind icon, an online pill, dates and unpair', async (t) => {
   const { root, document } = installTestDom(t, { rootId: 'root' });
   const info = {
     ...readyInfo('dddddddd'),
     clients: [
-      { id: 'c1', name: 'Fold · Mixdog App', platform: 'Android', browser: 'Mixdog App', createdAt: 1, lastSeenAt: 2, online: true },
-      { id: 'c2', name: 'Office', platform: 'Windows', browser: 'Mixdog Desktop', createdAt: 1, lastSeenAt: 0, online: false },
-      { id: 'c3', name: 'Laptop · Chrome', platform: 'Windows', browser: 'Chrome', createdAt: 1, lastSeenAt: 2, online: false },
+      {
+        id: 'c1',
+        name: 'Fold · Mixdog App',
+        platform: 'Android',
+        browser: 'Mixdog App',
+        createdAt: 1,
+        lastSeenAt: 2,
+        online: true,
+      },
+      {
+        id: 'c2',
+        name: 'Office',
+        platform: 'Windows',
+        browser: 'Mixdog Desktop',
+        createdAt: 1,
+        lastSeenAt: 0,
+        online: false,
+      },
+      {
+        id: 'c3',
+        name: 'Laptop · Chrome',
+        platform: 'Windows',
+        browser: 'Chrome',
+        createdAt: 1,
+        lastSeenAt: 2,
+        online: false,
+      },
     ],
   };
   const api = {
     getRemoteAccessInfo: () => Promise.resolve(info),
     getRemotePairCode: () => Promise.resolve({ code: '123456', expiresAt: Date.now() + 100_000 }),
     rotateRemoteAccess: () => Promise.resolve(info),
+    listRemoteHosts: () => Promise.resolve([]),
+    connectRemoteHostByCode: () => Promise.resolve(),
   };
   setCachedConnectionInfo(api, info);
   await act(async () => root.render(React.createElement(ConnectionPanel, { api })));
-  const rows = [...document.querySelectorAll('.settings-resource')];
-  assert.equal(rows.length, 4, 'three devices plus unpair-all');
-  assert.deepEqual(
-    rows.slice(0, 3).map((row) => row.querySelector('.settings-resource-icon svg')?.getAttribute('aria-label')),
-    ['Mixdog app', 'Mixdog PC', 'Browser']
-  );
-  assert.deepEqual(
-    rows.slice(0, 3).map((row) => row.querySelector('.settings-status').textContent),
-    ['Online', 'Offline', 'Offline']
-  );
-  assert.ok(rows[0].querySelector('.settings-resource-meta').textContent.includes('Added'));
-  assert.ok(rows.slice(0, 3).every((row) => [...row.querySelectorAll('button')].some((b) => b.textContent === 'Unpair')));
+  const seen = [];
+  for (const tab of ['Mobile', 'Web', 'Other PC']) {
+    await act(async () => tabNamed(document, tab).click());
+    const rows = [...document.querySelectorAll('.settings-resource')];
+    assert.equal(rows.length, 2, `${tab}: one device plus unpair-all`);
+    const [row] = rows;
+    seen.push([
+      row.querySelector('.settings-resource-icon svg')?.getAttribute('aria-label'),
+      row.querySelector('.settings-status').textContent,
+    ]);
+    assert.ok(row.querySelector('.settings-resource-meta').textContent.includes('Added'));
+    assert.ok([...row.querySelectorAll('button')].some((b) => b.textContent === 'Unpair'));
+  }
+  assert.deepEqual(seen, [
+    ['Mixdog app', 'Online'],
+    ['Browser', 'Offline'],
+    ['Mixdog PC', 'Offline'],
+  ]);
 });

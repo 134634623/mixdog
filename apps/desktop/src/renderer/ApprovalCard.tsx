@@ -146,6 +146,12 @@ export function ApprovalCard({
     };
   }, [decide, resolvedElsewhere, outcome]);
   if (outcome || resolvedElsewhere) {
+    let outcomeLabel = '';
+    if (outcome) {
+      outcomeLabel = outcome.approved
+        ? t('Allowed from {{device}}', { device: outcome.device })
+        : t('Denied from {{device}}', { device: outcome.device });
+    }
     return (
       <article className="approval-card approval-card--inline approval-card--resolved" role="status">
         <div className="approval-heading">
@@ -154,11 +160,7 @@ export function ApprovalCard({
           </span>
           <div>
             {outcome ? (
-              <b>
-                {outcome.approved
-                  ? t('Allowed from {{device}}', { device: outcome.device })
-                  : t('Denied from {{device}}', { device: outcome.device })}
-              </b>
+              <b>{outcomeLabel}</b>
             ) : (
               <>
                 <b>{t('Resolved on another device')}</b>

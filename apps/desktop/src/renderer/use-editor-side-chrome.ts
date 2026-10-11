@@ -143,7 +143,8 @@ export function useEditorSideChrome({
     save: () => void sideChromeRef.current.save(),
     reveal: remote ? undefined : () => void api?.revealFile?.(projectPath, relPath, accessToken),
     copyPath: remote ? () => void copyTextToClipboard(explorerAbsolutePath(projectPath, relPath)) : undefined,
-    openDefault: sideOpenDefault && !remote ?() => void openEditorFileExternally(projectPath, relPath, accessToken) : undefined,
+    openDefault:
+      sideOpenDefault && !remote ? () => void openEditorFileExternally(projectPath, relPath, accessToken) : undefined,
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: fileChrome is rebuilt every render; the listed primitives are its change signature, so the dock is told only when something it shows changed.
   useEffect(() => {

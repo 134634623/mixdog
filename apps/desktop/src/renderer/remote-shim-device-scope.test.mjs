@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { REMOTE_PAIRING_STORAGE_KEYS, migrateLegacyRemotePairing, remotePairingKeys } from './remote-pairing-recovery.ts';
+import {
+  REMOTE_PAIRING_STORAGE_KEYS,
+  migrateLegacyRemotePairing,
+  remotePairingKeys,
+} from './remote-pairing-recovery.ts';
 
 const ORIGIN = 'https://relay.example';
 const A = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -30,7 +34,10 @@ const legacySeed = (device) => ({
 });
 
 const loadContext = async ({ pathname, storage }) => {
-  const saved = ['location', 'document', 'localStorage'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]);
+  const saved = ['location', 'document', 'localStorage'].map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(globalThis, key),
+  ]);
   const define = (key, value) => Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
   define('location', { origin: ORIGIN, pathname });
   define('document', { cookie: '', visibilityState: 'visible' });
@@ -88,7 +95,7 @@ test('an existing single-PC user keeps working after migration', async () => {
   assert.equal(ctx.browserId, 'browser-a');
 });
 
-test('opening PC B after pairing A uses none of A\'s credentials and starts B\'s own claim', async () => {
+test("opening PC B after pairing A uses none of A's credentials and starts B's own claim", async () => {
   const storage = memoryStorage(legacySeed(A));
   const first = await loadContext({ pathname: `/d/${A}/`, storage });
   assert.equal(first.token, TOKEN_A);

@@ -228,7 +228,9 @@ export class SessionTransport implements DesktopTransport {
       if (startsWait) {
         // An older daemon must yield: abort its in-flight work now, once per wait.
         void daemonModule
-          .forceDaemonUpgrade({ log: (line) => this.emit('diagnostic', 'session-daemon-log', { detail: line, attempt }) })
+          .forceDaemonUpgrade({
+            log: (line) => this.emit('diagnostic', 'session-daemon-log', { detail: line, attempt }),
+          })
           .catch((error) =>
             this.emit('diagnostic', 'daemon-force-upgrade-failed', {
               errorName: error instanceof Error ? error.name : typeof error,

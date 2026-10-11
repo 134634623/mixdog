@@ -164,7 +164,8 @@ export function createRelayClientCallDispatch(
         const sessionId = requiredSessionId(call.params[0]);
         if (call.params[1] == null) deps.browserStreams.unsubscribe(clientId, sessionId);
         else deps.browserStreams.subscribe(clientId, sessionId, normalizeRemoteBrowserStreamOptions(call.params[1]));
-        if (typeof call.id === 'number') await deps.sendEncryptedFrame(clientId, { id: call.id, ok: true, value: null });
+        if (typeof call.id === 'number')
+          await deps.sendEncryptedFrame(clientId, { id: call.id, ok: true, value: null });
       } catch (error) {
         if (typeof call.id === 'number') {
           await deps.sendEncryptedFrame(clientId, {
@@ -181,7 +182,8 @@ export function createRelayClientCallDispatch(
     if (call?.method === 'browserRemoteTabs' && Array.isArray(call.params)) {
       try {
         const tabs = await deps.browserTabs.watch(clientId, call.params[0] === true);
-        if (typeof call.id === 'number') await deps.sendEncryptedFrame(clientId, { id: call.id, ok: true, value: tabs });
+        if (typeof call.id === 'number')
+          await deps.sendEncryptedFrame(clientId, { id: call.id, ok: true, value: tabs });
       } catch (error) {
         if (typeof call.id === 'number') {
           await deps.sendEncryptedFrame(clientId, {

@@ -54,7 +54,10 @@ test('the first deploy adopts the installed renderer as legacy and adds the new 
 
     // Redeploying the same build is idempotent; a relay-only deploy (no
     // desktop version) registers nothing and keeps the registry.
-    assert.equal(prepareReleases({ releasesDir: releases, rendererDir: join(root, 'next'), desktopVersion: '1.5.0', now }).added, false);
+    assert.equal(
+      prepareReleases({ releasesDir: releases, rendererDir: join(root, 'next'), desktopVersion: '1.5.0', now }).added,
+      false
+    );
     const relayOnly = prepareReleases({ releasesDir: releases, rendererDir: join(root, 'next'), now });
     assert.deepEqual(relayOnly, { releaseId: '', added: false, legacy: 'legacy', kept: ['legacy', id], dropped: [] });
   } finally {
@@ -119,7 +122,12 @@ test('unregistered leftovers from an interrupted run are collected, and bad inpu
   try {
     await stagedRenderer(join(root, 'next'), 'b');
     await stagedRenderer(join(releases, 'orphan'), 'c');
-    const result = prepareReleases({ releasesDir: releases, rendererDir: join(root, 'next'), desktopVersion: '2.0.0', now });
+    const result = prepareReleases({
+      releasesDir: releases,
+      rendererDir: join(root, 'next'),
+      desktopVersion: '2.0.0',
+      now,
+    });
     assert.deepEqual((await readdir(releases)).sort(), ['index.json', result.releaseId].sort());
     assert.throws(
       () => prepareReleases({ releasesDir: releases, rendererDir: join(root, 'next'), desktopVersion: '../x', now }),
@@ -195,7 +203,10 @@ test('verification requires the added release among the retained ones', async ()
       verifyRelease({ origin, expectedIndex, expectedRelease: '1.0.0-aaa' }),
       (error) => !/side by side/.test(error.message)
     );
-    await assert.rejects(verifyRelease({ origin, expectedIndex, expectedRelease: '9.9.9-zzz' }), /not served side by side/);
+    await assert.rejects(
+      verifyRelease({ origin, expectedIndex, expectedRelease: '9.9.9-zzz' }),
+      /not served side by side/
+    );
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

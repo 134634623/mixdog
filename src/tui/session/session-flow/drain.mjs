@@ -174,7 +174,9 @@ export function createDrainLoop(bag, { queue, steering, submissions, flushDeferr
     clearBlockedDrainRetry();
     if (entries.length === 0) return;
     queue.removeQueuedEntries(entries);
-    const mirrored = entries.filter((entry) => steering.shouldMirrorSteeringEntry(entry) && !entry.steeringPersistRestored);
+    const mirrored = entries.filter(
+      (entry) => steering.shouldMirrorSteeringEntry(entry) && !entry.steeringPersistRestored
+    );
     if (mirrored.length > 0) {
       void Promise.resolve(dropTuiSteeringPersist(steering.leadSessionId(), mirrored)).catch(() => {});
     }
@@ -276,8 +278,10 @@ export function createDrainLoop(bag, { queue, steering, submissions, flushDeferr
     // Admission fence. While closing, only user prompts are accepted (retained
     // so a failed close loses nothing); notification-driven/model-visible
     // enqueues are refused. A closed session accepts nothing.
-    if (admission() !== 'open' && (admission() === 'terminal' || (options.mode || 'prompt') !== 'prompt')) {
-      tuiDebug(`enqueue refused: session admission=${admission()} mode=${options.mode || 'prompt'}`);
+    const state = admission();
+    const mode = options.mode || 'prompt';
+    if (state !== 'open' && (state === 'terminal' || mode !== 'prompt')) {
+      tuiDebug(`enqueue refused: session admission=${state} mode=${mode}`);
       return false;
     }
     const submissionId = String(options.id || '').trim();

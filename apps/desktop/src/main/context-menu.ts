@@ -1,4 +1,11 @@
-import { clipboard, type ContextMenuParams, Menu, type MenuItemConstructorOptions, shell, type WebContents } from 'electron';
+import {
+  clipboard,
+  type ContextMenuParams,
+  Menu,
+  type MenuItemConstructorOptions,
+  shell,
+  type WebContents,
+} from 'electron';
 import { requiredExternalUrl } from './ipc-validation';
 import { nativeT } from './native-i18n';
 

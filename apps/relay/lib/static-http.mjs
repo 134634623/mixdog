@@ -39,7 +39,15 @@ export const DEVICE_COOKIE_NAME = 'mixdog_device';
 // they stay raw (gzip would only burn CPU); TrueType is uncompressed tables.
 const COMPRESSIBLE_TYPE = /^(?:text\/|application\/(?:json|wasm)|image\/svg|font\/ttf)/;
 const COMPRESS_MIN_BYTES = 1024;
-const NO_CACHE_SUFFIXES = ['index.html', 'manifest.webmanifest', 'sw.js', 'sw-shell.js', 'sw-media.js', 'ui-language.js', 'boot.js'];
+const NO_CACHE_SUFFIXES = [
+  'index.html',
+  'manifest.webmanifest',
+  'sw.js',
+  'sw-shell.js',
+  'sw-media.js',
+  'ui-language.js',
+  'boot.js',
+];
 // Siblings written by `npm run stage:web` next to each text asset.
 const PRECOMPRESSED_EXTENSIONS = new Set(['.br', '.gz']);
 // Keep validators, not asset bodies, across requests. Release swaps and

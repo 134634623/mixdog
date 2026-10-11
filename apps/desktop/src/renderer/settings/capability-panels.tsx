@@ -250,7 +250,9 @@ function UpdatePanel({ data, pending, run, updaterState, checkDesktopUpdate, ins
     <Group title={onHost ? t('Update (host computer)') : t('Update')}>
       <ResourceRow
         title={t('Current version')}
-        description={onHost ? t('Installed Mixdog Desktop version on the host computer.') : t('Installed Mixdog Desktop version.')}
+        description={
+          onHost ? t('Installed Mixdog Desktop version on the host computer.') : t('Installed Mixdog Desktop version.')
+        }
         meta={String(update.currentVersion || t('unknown'))}
       />
       <ResourceRow

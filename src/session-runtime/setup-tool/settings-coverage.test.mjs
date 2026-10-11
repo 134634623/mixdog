@@ -447,7 +447,9 @@ test('provider account changes reach the roster API and return no usage or ident
 test('developer options with a warning turn on only with explicit risk acceptance', async () => {
   const calls = [];
   const view = {
-    sections: [{ id: 'providers', options: [{ id: 'risky', label: 'Risky', warning: 'Account risk.' }, { id: 'plain' }] }],
+    sections: [
+      { id: 'providers', options: [{ id: 'risky', label: 'Risky', warning: 'Account risk.' }, { id: 'plain' }] },
+    ],
   };
   const api = {
     getDeveloperSettings: () => view,
@@ -492,7 +494,12 @@ test('skill definitions read the frontmatter-free body; built-in skills accept o
   const saved = [];
   const rows = [
     { name: 'user-skill', description: 'Mine', whenToUse: 'Probe', editable: true, toolDependencies: [] },
-    { name: 'builtin-skill', description: 'Shipped', editable: false, toolDependencies: [{ type: 'tool', value: 'setup' }] },
+    {
+      name: 'builtin-skill',
+      description: 'Shipped',
+      editable: false,
+      toolDependencies: [{ type: 'tool', value: 'setup' }],
+    },
   ];
   const api = {
     skillContent: async (name) => ({ content: `Body of ${name}.` }),
@@ -521,7 +528,11 @@ test('skill definitions read the frontmatter-free body; built-in skills accept o
     definitionKind: 'skill',
     definition: { originalName: 'builtin-skill', toolDependencies: dependencies },
   });
-  assert.deepEqual(saved.at(-1), { originalName: 'builtin-skill', dependenciesOnly: true, toolDependencies: dependencies });
+  assert.deepEqual(saved.at(-1), {
+    originalName: 'builtin-skill',
+    dependenciesOnly: true,
+    toolDependencies: dependencies,
+  });
   await assert.rejects(
     run(api, {
       action: 'save_definition',

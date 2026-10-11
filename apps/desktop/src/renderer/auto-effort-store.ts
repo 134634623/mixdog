@@ -14,7 +14,11 @@ const listeners = new Set<() => void>();
 export function publishAutoEffort(settings: unknown): void {
   const entry = (settings as RecordValue | undefined)?.autoEffort as RecordValue | undefined;
   if (!entry) return;
-  current = { installed: entry.installed === true, enabled: entry.enabled === true, supported: entry.supported !== false };
+  current = {
+    installed: entry.installed === true,
+    enabled: entry.enabled === true,
+    supported: entry.supported !== false,
+  };
   for (const listener of listeners) listener();
 }
 
@@ -50,7 +54,8 @@ export function useAutoEffortRoute(capable: boolean) {
   const autoEffort = useAutoEffort(capable);
   const [pending, setPending] = useState(false);
   return {
-    autoEffort: capable && autoEffort?.installed && autoEffort.supported ? { enabled: autoEffort.enabled, pending } : null,
+    autoEffort:
+      capable && autoEffort?.installed && autoEffort.supported ? { enabled: autoEffort.enabled, pending } : null,
     onChangeAutoEffort: async (enabled: boolean) => {
       setPending(true);
       try {

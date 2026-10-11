@@ -572,6 +572,7 @@ export function SidebarUsage({
             {SUBSCRIPTIONS.map((subscription) => {
               const row = subscriptionRow(dashboard, subscription);
               const windows = quotaWindows(row);
+              const credits = creditsOf(row);
               const checking = row.status === 'checking';
               // Only connected providers are listed, so a row here always
               // reads as connected and never as a first-load placeholder.
@@ -631,9 +632,9 @@ export function SidebarUsage({
                       </span>
                     )}
                   </span>
-                  {creditsOf(row) && (
+                  {credits && (
                     <CreditLine
-                      credits={creditsOf(row) as UsageRecord}
+                      credits={credits}
                       on={creditSwitch[subscription.provider] ?? row.useCredits === true}
                       exhausted={windows.some((window) => (usedPercent(window) ?? 0) >= 100)}
                       onToggle={(next) => void toggleCredits(subscription.provider, next)}

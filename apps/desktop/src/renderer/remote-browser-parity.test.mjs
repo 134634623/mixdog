@@ -74,7 +74,10 @@ test('pushed tab lists and import progress reach their listeners; malformed rows
       event: 'browserRemoteTabs',
       payload: [{ id: 'main-browser-a', title: 'A', url: 'https://a.test/', loading: 1 }, { id: 7 }, null],
     });
-    await leg.deliver({ event: 'browserProfileImportProgress', payload: { jobId: 'job', item: 'history', state: 'running' } });
+    await leg.deliver({
+      event: 'browserProfileImportProgress',
+      payload: { jobId: 'job', item: 'history', state: 'running' },
+    });
     await leg.deliver({ event: 'browserProfileImportProgress', payload: 'nope' });
     assert.deepEqual(tabs, [[{ id: 'main-browser-a', title: 'A', url: 'https://a.test/', loading: false }]]);
     assert.deepEqual(progress, [{ jobId: 'job', item: 'history', state: 'running' }]);

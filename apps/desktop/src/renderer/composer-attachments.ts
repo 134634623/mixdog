@@ -13,7 +13,7 @@ import {
   type ComposerAttachment,
 } from './composer-support';
 import { t } from './i18n';
-import { isRemoteBrowserRenderer } from './remote-ui-projection';
+import { isRemoteBrowserRenderer, isRemoteHostRenderer } from './remote-ui-projection';
 import { learnedRelayUplinkBinaryBytes } from './remote-shim-payload-limit';
 import {
   LEGACY_OFFICE_REPLACEMENT,
@@ -88,7 +88,7 @@ export function remoteAttachmentLimitBytes(binaryCeiling: number | null): number
 export function remoteAttachmentSizeError(
   name: string,
   rawBytes: number,
-  binaryCeiling: number | null = isRemoteBrowserRenderer() ? learnedRelayUplinkBinaryBytes() : null
+  binaryCeiling: number | null = isRemoteHostRenderer() ? learnedRelayUplinkBinaryBytes() : null
 ): string {
   const limit = remoteAttachmentLimitBytes(binaryCeiling);
   if (limit === null || rawBytes <= limit) return '';

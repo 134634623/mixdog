@@ -63,7 +63,11 @@ type Fetch = typeof fetch;
 
 /** Redeems a 6-digit code at the relay. The relay answers a right code once
  *  and rate-limits wrong ones, so the messages here are all a person needs. */
-export async function redeemPairCode(relayOrigin: string, code: string, doFetch: Fetch = fetch): Promise<RedeemedPairCode> {
+export async function redeemPairCode(
+  relayOrigin: string,
+  code: string,
+  doFetch: Fetch = fetch
+): Promise<RedeemedPairCode> {
   const response = await doFetch(`${relayOrigin}/pair-code/resolve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

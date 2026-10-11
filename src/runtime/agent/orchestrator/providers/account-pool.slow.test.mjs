@@ -501,7 +501,10 @@ test('a dead sign-in fails over to the next account in auto mode without blockin
 
   changeProviderAccounts(provider, { selectedId: ids[0], auto: false });
   calls.length = 0;
-  await assert.rejects(gateway.send([{ role: 'user', content: 'hi' }], 'm', [], { sessionId: 's' }), (e) => e.reauthRequired === true);
+  await assert.rejects(
+    gateway.send([{ role: 'user', content: 'hi' }], 'm', [], { sessionId: 's' }),
+    (e) => e.reauthRequired === true
+  );
   assert.deepEqual(calls, [ids[0]]);
 });
 

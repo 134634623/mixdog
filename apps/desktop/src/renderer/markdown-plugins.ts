@@ -109,7 +109,8 @@ export function repairAdjacentStrongPunctuation() {
 // the trailing punctuation and unbalanced `)` that cut exposes, returning the
 // remainder to prose. Only literal autolinks are cut: their label starts where
 // the link starts, while `[..](..)` and `<..>` carry a delimiter first.
-const CJK_CHARACTER = /[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u3000-\u303f\uff00-\uffef]/u;
+const CJK_CHARACTER =
+  /[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u3000-\u303f\uff00-\uffef]/u;
 const TRAILING_URL_PUNCTUATION = /[?!.,:*_~]$/;
 
 function autolinkCut(label: string): number {
@@ -124,6 +125,18 @@ function autolinkCut(label: string): number {
   }
 }
 
+/** The URL and sole text label of a literal autolink: the label is the URL's
+ *  tail and starts where the link starts. Null for any other node. */
+function literalAutolink(link: HastLikeNode): { url: string; label: HastLikeNode & { value: string } } | null {
+  const url = link.url;
+  const label = link.children?.[0];
+  if (link.type !== 'link' || typeof url !== 'string' || link.children?.length !== 1) return null;
+  if (label?.type !== 'text' || typeof label.value !== 'string' || !url.endsWith(label.value)) return null;
+  const start = link.position?.start.offset;
+  if (start === undefined || start !== label.position?.start.offset) return null;
+  return { url, label: label as HastLikeNode & { value: string } };
+}
+
 export function trimAutolinkCjkSuffix() {
   return (tree: HastLikeNode) => {
     const visit = (node: HastLikeNode) => {
@@ -133,20 +146,9 @@ export function trimAutolinkCjkSuffix() {
       for (const child of children) {
         visit(child);
         repaired.push(child);
-        const label = child.children?.[0];
-        const url = child.url;
-        if (
-          child.type !== 'link' ||
-          typeof url !== 'string' ||
-          child.children?.length !== 1 ||
-          label?.type !== 'text' ||
-          typeof label.value !== 'string' ||
-          !url.endsWith(label.value) ||
-          child.position?.start.offset === undefined ||
-          child.position.start.offset !== label.position?.start.offset
-        ) {
-          continue;
-        }
+        const autolink = literalAutolink(child);
+        if (!autolink) continue;
+        const { url, label } = autolink;
         const end = autolinkCut(label.value);
         if (end <= 0) continue;
         const tail = label.value.slice(end);

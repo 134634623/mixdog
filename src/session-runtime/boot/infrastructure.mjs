@@ -7,7 +7,11 @@ import { createStandaloneHookBus } from '../services/hook-bus.mjs';
 import { updateCurrentCwdOverride, writeLastSessionCwd } from '../../runtime/shared/user-cwd.mjs';
 import { listRegisteredPlugins, pluginAdminStatus } from '../services/plugin-admin.mjs';
 import { clean } from '../../runtime/agent/orchestrator/runtime-core/session-text.mjs';
-import { countSkillFiles, pluginManifest, pluginMcpServerName } from '../../runtime/agent/orchestrator/runtime-core/plugin-mcp.mjs';
+import {
+  countSkillFiles,
+  pluginManifest,
+  pluginMcpServerName,
+} from '../../runtime/agent/orchestrator/runtime-core/plugin-mcp.mjs';
 import { bootProfile } from '../boot-profile.mjs';
 import { createMcpGlue } from '../mcp-glue.mjs';
 import { createSelfUpdateController } from '../self-update.mjs';

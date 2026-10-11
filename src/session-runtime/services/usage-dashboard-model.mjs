@@ -450,7 +450,7 @@ function usageTotal(rows) {
 export function creditsFromSnapshot(providerId, snapshot) {
   const balance = snapshot?.balance;
   if (providerId === 'openai-oauth') {
-    if (!balance || balance.unit !== 'credits') return null;
+    if (balance?.unit !== 'credits') return null;
     const amount = num(balance.remainingCredits, null);
     const unlimited = balance.unlimited === true;
     if (!(balance.hasCredits === true || unlimited || (amount !== null && amount > 0))) return null;

@@ -652,7 +652,10 @@ export function sweepLegs(wss) {
       // the pong at all. The queue budgets already bound what such a leg can
       // hold, so it gets a few extra windows instead of being cut as a 1006.
       const draining = ws.legPausedUplink || ws.legPausedIngress || (ws.bufferedAmount || 0) > 0;
-      if (draining && (ws.sweepGrace = (ws.sweepGrace || 0) + 1) <= SWEEP_DRAIN_GRACE_WINDOWS) continue;
+      if (draining) {
+        ws.sweepGrace = (ws.sweepGrace || 0) + 1;
+        if (ws.sweepGrace <= SWEEP_DRAIN_GRACE_WINDOWS) continue;
+      }
       // A terminate reaches the peer as a bare 1006 that names nobody, so the
       // sweep says here that IT was the one that cut a silent leg.
       console.log('[relay] sweep terminated a leg that missed its ping window');
@@ -741,11 +744,19 @@ if (invokedDirectly) {
   const rendererDir = process.env.RENDERER_DIR || '';
   // Default beside RENDERER_DIR so an already installed unit file needs no edit.
   const rendererReleasesDir =
-    process.env.RENDERER_RELEASES_DIR ||
-    (rendererDir ? join(dirname(resolve(rendererDir)), 'renderer-releases') : '');
+    process.env.RENDERER_RELEASES_DIR || (rendererDir ? join(dirname(resolve(rendererDir)), 'renderer-releases') : '');
   const tlsCert = process.env.TLS_CERT || '';
   const tlsKey = process.env.TLS_KEY || '';
-  startRelay({ port, dataDir, rendererDir, rendererReleasesDir, tlsCert, tlsKey, feedbackEnv: process.env, nativePushEnv: process.env })
+  startRelay({
+    port,
+    dataDir,
+    rendererDir,
+    rendererReleasesDir,
+    tlsCert,
+    tlsKey,
+    feedbackEnv: process.env,
+    nativePushEnv: process.env,
+  })
     .then((relay) => {
       const scheme = tlsCert && tlsKey ? 'https' : 'http';
       console.log(`[relay] ${scheme} listening on :${relay.port} (renderer: ${rendererDir || 'none'})`);

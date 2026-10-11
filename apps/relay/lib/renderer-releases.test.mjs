@@ -11,12 +11,7 @@ import WebSocket from 'ws';
 import { startRelay } from '../server.mjs';
 import { DeviceStore } from './device-store.mjs';
 import { createRendererReadiness } from './renderer-readiness.mjs';
-import {
-  createRendererCatalog,
-  parseReleaseIndex,
-  planRetention,
-  selectRelease,
-} from './renderer-releases.mjs';
+import { createRendererCatalog, parseReleaseIndex, planRetention, selectRelease } from './renderer-releases.mjs';
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 0, 1);
@@ -32,7 +27,12 @@ const legacyEntry = entry('legacy', '', 1, { legacy: true });
 const registry = (...releases) => parseReleaseIndex({ schemaVersion: 1, releases });
 
 test('selection: exact version, else newest compatible, else legacy', () => {
-  const index = registry(legacyEntry, entry('r100', '1.0.0', 10), entry('r102', '1.0.2', 20), entry('r110', '1.1.0', 30));
+  const index = registry(
+    legacyEntry,
+    entry('r100', '1.0.0', 10),
+    entry('r102', '1.0.2', 20),
+    entry('r110', '1.1.0', 30)
+  );
   assert.equal(selectRelease(index, { appVersion: '1.0.2' }).id, 'r102');
   // No release for 1.0.5: the newest build that is not newer than the desktop.
   assert.equal(selectRelease(index, { appVersion: '1.0.5' }).id, 'r102');

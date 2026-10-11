@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BROWSER_REMOTE_METHODS, browserParityRemoteMethods, runBrowserRemoteRequest } from './remote-browser-methods.ts';
+import {
+  BROWSER_REMOTE_METHODS,
+  browserParityRemoteMethods,
+  runBrowserRemoteRequest,
+} from './remote-browser-methods.ts';
 
 const CREDENTIAL = 'a'.repeat(24);
 
@@ -46,10 +50,12 @@ test('the window end dispatches each method to the browser host', async () => {
   const host = new Proxy(
     {},
     {
-      get: (_target, name) => async (...args) => {
-        calls.push([name, args]);
-        return name;
-      },
+      get:
+        (_target, name) =>
+        async (...args) => {
+          calls.push([name, args]);
+          return name;
+        },
     }
   );
   await runBrowserRemoteRequest(host, 'tabsWatch', [true]);

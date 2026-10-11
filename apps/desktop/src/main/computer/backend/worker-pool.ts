@@ -478,16 +478,7 @@ export function createWorkerPool(host: WorkerPoolHost) {
           },
         };
       },
-    }).then(
-      (value) => {
-        settle();
-        return value;
-      },
-      (error) => {
-        settle();
-        throw error;
-      }
-    );
+    }).finally(settle);
   }
 
   function residentWorkerPids(): number[] {

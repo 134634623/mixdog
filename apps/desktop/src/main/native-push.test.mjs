@@ -45,7 +45,9 @@ test('round trip with random keys; wrong key and tampering fail', () => {
   assert.deepEqual(decryptNativePush(a.privateKey, mx), content);
   assert.throws(() => decryptNativePush(device().privateKey, mx));
   const envelope = JSON.parse(Buffer.from(mx, 'base64url').toString());
-  envelope.ct = Buffer.from(envelope.ct, 'base64url').map((byte, i) => (i === 0 ? byte ^ 1 : byte)).toString('base64url');
+  envelope.ct = Buffer.from(envelope.ct, 'base64url')
+    .map((byte, i) => (i === 0 ? byte ^ 1 : byte))
+    .toString('base64url');
   assert.throws(() => decryptNativePush(a.privateKey, Buffer.from(JSON.stringify(envelope)).toString('base64url')));
 });
 
@@ -143,7 +145,12 @@ const HOST_ID = '0123456789abcdef0123456789abcdef';
 function notifierFixture({ foreground = false, enabled = true, accept = true } = {}) {
   const phone = device();
   const sent = [];
-  const web = { keys: async () => ({}), list: async () => [], remove: async () => true, removeByClient: async () => true };
+  const web = {
+    keys: async () => ({}),
+    list: async () => [],
+    remove: async () => true,
+    removeByClient: async () => true,
+  };
   const removed = [];
   const notifier = createPushNotifier({
     store: web,
@@ -152,7 +159,9 @@ function notifierFixture({ foreground = false, enabled = true, accept = true } =
     readFinalAnswer: async () => null,
     isClientForeground: () => false,
     native: {
-      list: async () => [{ clientId: 'c1', platform: 'apns', token: APNS_TOKEN, publicKey: phone.publicKey, sandbox: true }],
+      list: async () => [
+        { clientId: 'c1', platform: 'apns', token: APNS_TOKEN, publicKey: phone.publicKey, sandbox: true },
+      ],
       isClientForeground: () => foreground,
       send: (message) => (sent.push(message), accept),
       removeByClient: async (id) => (removed.push(id), true),

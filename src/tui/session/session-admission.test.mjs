@@ -12,7 +12,8 @@ import { join } from 'node:path';
 // before any runtime module resolves it, so this suite never touches real data.
 const dataDir = mkdtempSync(join(tmpdir(), 'mixdog-session-admission-'));
 process.env.MIXDOG_DATA_DIR = dataDir;
-test.after(() => rmSync(dataDir, { recursive: true, force: true }));const { createAgentJobFeed } = await import('./agent-job-feed.mjs');
+test.after(() => rmSync(dataDir, { recursive: true, force: true }));
+const { createAgentJobFeed } = await import('./agent-job-feed.mjs');
 const { createSessionFlow } = await import('./session-flow.mjs');
 const { createSessionApi } = await import('./session-api.mjs');
 const { renderAgentCompletionEnvelope } = await import('../../runtime/shared/task-notification-envelope.mjs');
@@ -24,7 +25,10 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 function completion(executionId, meta = {}) {
   const text = renderAgentCompletionEnvelope({ id: executionId, status: 'cancelled', result: `result ${executionId}` });
-  return { content: text, meta: { execution_id: executionId, status: 'cancelled', execution_surface: 'agent', ...meta } };
+  return {
+    content: text,
+    meta: { execution_id: executionId, status: 'cancelled', execution_surface: 'agent', ...meta },
+  };
 }
 
 function harness({ close = () => true, busy = false } = {}) {
@@ -221,7 +225,9 @@ test('every admission route is closed after the canonical close', async () => {
   assert.deepEqual(h.flow.drainPendingSteering(), []);
   // restored queue (abort requeue after the close) is settled, not parked
   const settled = [];
-  h.flow.requeueEntriesFront([{ id: 'r1', text: 'restored', mode: 'task-notification', onSettled: (d) => settled.push(d.status) }]);
+  h.flow.requeueEntriesFront([
+    { id: 'r1', text: 'restored', mode: 'task-notification', onSettled: (d) => settled.push(d.status) },
+  ]);
   assert.deepEqual(settled, ['rejected']);
   await h.flow.drain();
   await tick();

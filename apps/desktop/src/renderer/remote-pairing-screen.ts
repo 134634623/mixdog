@@ -375,7 +375,9 @@ export const createRemotePairingScreen = (
       const note = layer.querySelector<HTMLElement>('[data-role="note"]');
       if (note) {
         if (direct) {
-          note.textContent = earlyUiT('Use Mixdog right in this browser, no install needed. Approve it on your main PC.');
+          note.textContent = earlyUiT(
+            'Use Mixdog right in this browser, no install needed. Approve it on your main PC.'
+          );
         } else if (standalone) {
           note.textContent = message || earlyUiT('Mixdog needs a one-time approval from the desktop it belongs to.');
         } else if (mobile) {

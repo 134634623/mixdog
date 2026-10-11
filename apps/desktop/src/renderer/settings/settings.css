@@ -802,7 +802,7 @@
 .settings-connection-tabs button:hover {
   color: var(--mx-text);
 }
-.settings-connection-tabs button[aria-selected='true'] {
+.settings-connection-tabs button[aria-selected="true"] {
   color: var(--mx-text);
   box-shadow: inset 0 -2px 0 var(--mx-text);
 }
@@ -838,7 +838,7 @@
   font-weight: var(--mx-weight-label);
   cursor: pointer;
 }
-.settings-connection-seg button[aria-pressed='true'] {
+.settings-connection-seg button[aria-pressed="true"] {
   color: var(--mx-text);
   background: var(--mx-hover);
 }
@@ -951,7 +951,7 @@
   border-radius: var(--mx-radius-md);
   background: var(--mx-hover);
   box-shadow: var(--mx-card-outline);
-  font: 700 28px/38px var(--mx-font-mono, ui-monospace, Consolas, monospace);
+  font: 700 28px / 38px var(--mx-font-mono, ui-monospace, Consolas, monospace);
   letter-spacing: 0.12em;
   user-select: text;
 }
@@ -985,7 +985,7 @@
   height: 40px;
   text-align: center;
   letter-spacing: 0.25em;
-  font: 700 20px/28px var(--mx-font-mono, ui-monospace, Consolas, monospace);
+  font: 700 20px / 28px var(--mx-font-mono, ui-monospace, Consolas, monospace);
 }
 .settings-connection-hint {
   margin: 0;
@@ -997,6 +997,11 @@
   min-width: 0;
   display: grid;
   gap: 8px;
+}
+.settings-connection-code-card {
+  justify-items: start;
+  gap: 12px;
+  overflow-wrap: anywhere;
 }
 .settings-connection-note {
   margin: 0;
@@ -1034,7 +1039,7 @@
   text-overflow: ellipsis;
 }
 .mixdog-settings-v2 .settings-connection-link .settings-connection-input,
-.mixdog-settings-v2 .settings-remote-host-form .settings-connection-input[name='link'] {
+.mixdog-settings-v2 .settings-remote-host-form .settings-connection-input[name="link"] {
   flex-basis: 220px;
 }
 .mixdog-settings-v2 .settings-connection-input:focus-visible {
@@ -1049,7 +1054,8 @@
   .settings-connection-tabs {
     gap: 16px;
   }
-}.remote-claim-desktop {
+}
+.remote-claim-desktop {
   color: var(--mx-accent);
   font-weight: 600;
 }

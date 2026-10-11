@@ -124,4 +124,3 @@ test('remote attachment limit derives from the learned uplink ceiling', () => {
   assert.equal(remoteAttachmentSizeError('a.pdf', 3000, 8 * 1024 + 4000), '');
   assert.match(remoteAttachmentSizeError('a.pdf', 3001, 8 * 1024 + 4000), /^a\.pdf: .*limit per attachment/);
 });
-

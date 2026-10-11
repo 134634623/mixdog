@@ -13,17 +13,22 @@ import {
 
 import type { DesktopService } from './desktop-service-contract';
 import type { DesktopSettingsStore } from './settings-store';
-import type { DesktopLocalPathEntry, DesktopSettings } from '../shared/contract';
+import {
+  type DesktopLocalPathEntry,
+  type DesktopSettings,
+  type DesktopUpdaterState,
+  MAIN_BROWSER_PAGE_PREFIX,
+} from '../shared/contract';
 import { normalizeRemoteBrowserControl } from '../shared/remote-browser';
 import { browserParityRemoteMethods, type BrowserRemoteMethod } from './remote-browser-methods';
-import { STALE_SESSION_VIEW_MARKER } from '../shared/session-devices';
+import { pushRemoteMethods } from './remote-push-methods';
+import { sessionRemoteMethods } from './remote-session-methods';
 import { optionalSessionId, requiredSessionId } from './desktop-state';
 import { submitFeedback } from './feedback-client';
 import { validateGithubRequest } from '../../../../src/runtime/github/contract.mjs';
 import type { TerminalSpawnProfile } from './terminal-contract';
 import {
   projectDisplayName,
-  requiredAbortOptions,
   requiredDesktopCapabilityReadRequests,
   requiredDesktopCapabilityRequest,
   requiredDesktopSettingKey,
@@ -39,15 +44,8 @@ import {
   requiredGitOptionalMessage,
   requiredModelCatalogOptions,
   requiredModelSelection,
-  requiredNewTaskDraft,
-  requiredPromptContent,
   requiredSessionContentQuery,
   requiredString,
-  requiredSubmitOptions,
-  requiredSessionMessageCount,
-  requiredTranscriptItemLimit,
-  requiredToolApprovalDecision,
-  sessionDisplayName,
   requiredGitGlobalConfigKey,
   requiredLspDocumentInput,
   requiredLspRequestInput,
@@ -60,8 +58,6 @@ import {
 import { absoluteLocalPath } from './local-files';
 import { createRemoteFilePreviewMethods } from './remote-file-preview';
 import { projectEntryPathIn } from './project-files';
-import { MAIN_BROWSER_PAGE_PREFIX } from '../shared/contract';
-import type { DesktopUpdaterState } from '../shared/contract';
 import { MAX_SELECTED_FILE_GRANTS, owningProject, sameGrantedPath, selectedFileGrantKey } from './selected-file-grants';
 import {
   requiredCommitHash,
@@ -96,7 +92,7 @@ export interface RemoteMethodClient {
   staleView?(sessionId: string, device: string): boolean;
 }
 
-export const STALE_SESSION_VIEW_MESSAGE = `${STALE_SESSION_VIEW_MARKER} Review the latest messages, then send again.`;
+export { STALE_SESSION_VIEW_MESSAGE } from './remote-session-methods';
 
 export interface RemoteMethodDependencies {
   host: DesktopService;
@@ -150,7 +146,7 @@ export interface RemoteMethodDependencies {
 
 export type RemoteHostRequestMethod = 'trashItem' | 'updaterState' | 'updaterCheck' | 'updaterInstall';
 
-type RemoteMethod = (params: unknown[]) => unknown;
+export type RemoteMethod = (params: unknown[]) => unknown;
 type InvokeDesktopOperation = (name: string, args: unknown[]) => Promise<unknown>;
 
 /** Permissions this bridge issued for paths outside every registered project. */
@@ -658,24 +654,8 @@ export function createRemoteMethods(
   }: RemoteMethodDependencies,
   client?: RemoteMethodClient
 ): Record<string, RemoteMethod> {
-  const connectionDevice = async (): Promise<string> => (await client?.deviceName?.()) || 'Web app';
   const invokeDesktopOperation = (name: string, args: unknown[]): Promise<unknown> =>
     host.invokeDesktopOperation(name, args);
-  const requiredNativePush = (): NonNullable<RemoteMethodDependencies['nativePush']> => {
-    if (!nativePush || nativePush.platforms().length === 0) {
-      throw new TypeError('Native push is unavailable on this connection.');
-    }
-    return nativePush;
-  };
-  const connectionClientId = (): string => {
-    const id = client?.credentialId?.() ?? '';
-    if (!id) throw new TypeError('Native push needs a paired client.');
-    return id;
-  };
-  const requiredPush = ():NonNullable<RemoteMethodDependencies['push']> => {
-    if (!push) throw new TypeError('Push notifications are unavailable on this connection.');
-    return push;
-  };
   const requiredBrowserRemote = (): NonNullable<RemoteMethodDependencies['browserRemote']> => {
     if (!browserRemote) throw new TypeError('Remote Browser Use is unavailable.');
     return browserRemote;
@@ -735,81 +715,11 @@ export function createRemoteMethods(
         { pages: request.pages, maxWidth: request.maxWidth },
       ]);
     },
-    // Web Push. The browser subscribes with the key this returns and hands the
-    // resulting endpoint back over the SAME encrypted channel, so the relay
-    // never sees which device wants notifications.
-    pushPublicKey: () => requiredPush().publicKey(),
-    registerPushSubscription: async ([input]) => {
-      const record = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-      await requiredPush().register({
-        endpoint: requiredString(record.endpoint, 'endpoint'),
-        p256dh: requiredString(record.p256dh, 'p256dh'),
-        auth: requiredString(record.auth, 'auth'),
-        ...(typeof record.clientId === 'string' ? { clientId: record.clientId } : {}),
-        ...(typeof record.label === 'string' ? { label: record.label } : {}),
-      });
-      return true;
-    },
-    removePushSubscription: ([endpoint]) => requiredPush().remove(requiredString(endpoint, 'endpoint')),
-    // Native app push. `{ platform, token, publicKey }` arrives over the
-    // encrypted channel and is bound to the paired client behind it; the
-    // content of every later push is encrypted for `publicKey`.
-    registerNativePush: async ([input]) => {
-      const native = requiredNativePush();
-      const record = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
-      if (typeof record.platform !== 'string' || !native.platforms().includes(record.platform)) {
-        throw new TypeError('Native push is unavailable for this platform.');
-      }
-      await native.register({
-        clientId: connectionClientId(),
-        platform: record.platform,
-        token: record.token,
-        publicKey: record.publicKey,
-        sandbox: record.sandbox,
-      });
-      return true;
-    },
-    removeNativePush: ([token]) => {
-      if (token !== undefined && typeof token !== 'string') throw new TypeError('token must be a string.');
-      return requiredNativePush().remove(connectionClientId(), token);
-    },
+    ...pushRemoteMethods(push, nativePush, client),
     listSessions: () => host.listSessions(),
-    markSessionRead: ([sessionId, messageCount, consumedUnread]) => {
-      if (consumedUnread !== undefined && typeof consumedUnread !== 'boolean') {
-        throw new TypeError('consumedUnread must be a boolean.');
-      }
-      return host.markSessionRead(
-        requiredSessionId(sessionId),
-        requiredSessionMessageCount(messageCount),
-        consumedUnread === true
-      );
-    },
     listAgentPool: () => host.listAgentPool(),
     searchSessionContent: ([query]) => host.searchSessionContent(requiredSessionContentQuery(query)),
-    renameSession: ([sessionId, title]) => host.renameSession(requiredSessionId(sessionId), sessionDisplayName(title)),
-    setSessionArchived: ([sessionId, archived]) => {
-      if (typeof archived !== 'boolean') throw new TypeError('archived must be a boolean.');
-      return host.setSessionArchived(requiredSessionId(sessionId), archived);
-    },
-    setSessionFavorite: ([sessionId, favorite]) => {
-      if (typeof favorite !== 'boolean') throw new TypeError('favorite must be a boolean.');
-      return host.setSessionFavorite(requiredSessionId(sessionId), favorite);
-    },
-    deleteSession: async ([sessionId]) => {
-      const ownerSessionId = requiredSessionId(sessionId);
-      const snapshot = await host.deleteSession(ownerSessionId);
-      // Session deletion remains authoritative when Browser Use is unavailable.
-      if (browserRemote) await browserRemote('release', [ownerSessionId]).catch(() => undefined);
-      return snapshot;
-    },
-    // Cold-lane fill for the remote surface: a canonical session.read whose
-    // replay frame returns through the broadcast sessionState lane.
-    prefetchSession: ([sessionId, itemLimit, readTraceId]) =>
-      host.prefetchSession?.(
-        requiredSessionId(sessionId),
-        requiredTranscriptItemLimit(itemLimit),
-        typeof readTraceId === 'string' && readTraceId ? readTraceId : undefined
-      ) ?? false,
+    ...sessionRemoteMethods(host, client, browserRemote),
     searchProjectFiles: ([projectIdOrWorkspaceId, query, limit, includeIgnored]) => {
       if (typeof query !== 'string' || query.length > 1_024) {
         throw new TypeError('query is invalid.');
@@ -822,42 +732,9 @@ export function createRemoteMethods(
       );
     },
     getSnapshot: () => host.getSnapshot(),
-    submitNewTask: async ([prompt, options, draft]) =>
-      host.submitNewTask(
-        requiredPromptContent(prompt),
-        { ...requiredSubmitOptions(options), device: await connectionDevice() },
-        requiredNewTaskDraft(draft)
-      ),
-    submitToSession: async ([sessionId, prompt, options]) => {
-      const id = requiredSessionId(sessionId);
-      const content = requiredPromptContent(prompt);
-      const submitOptions = requiredSubmitOptions(options);
-      const device = await connectionDevice();
-      if (client?.staleView?.(id, device)) throw new Error(STALE_SESSION_VIEW_MESSAGE);
-      return host.submitToSession(id, content, { ...submitOptions, device });
-    },
-    abortSession: async ([sessionId, options]) =>
-      host.abortSession(requiredSessionId(sessionId), {
-        ...requiredAbortOptions(options),
-        device: await connectionDevice(),
-      }),
-    resolveToolApprovalForSession: async ([sessionId, id, decision]) =>
-      host.resolveToolApprovalForSession(requiredSessionId(sessionId), requiredString(id, 'approval id', 1_024), {
-        ...requiredToolApprovalDecision(decision),
-        device: await connectionDevice(),
-      }),
-    inheritSession: ([sourceSessionId, selection, options]) =>
-      host.inheritSession(
-        requiredSessionId(sourceSessionId),
-        selection == null ? null : requiredModelSelection(selection),
-        { compact: (options as { compact?: unknown } | null | undefined)?.compact === true }
-      ),
     listProviderModels: ([options]) => host.listProviderModels(requiredModelCatalogOptions(options)),
     setModelRoute: ([selection, sessionId]) =>
-      host.setModelRoute(
-        requiredModelSelection(selection),
-        optionalSessionId(sessionId)
-      ),
+      host.setModelRoute(requiredModelSelection(selection), optionalSessionId(sessionId)),
     setFast: ([enabled, sessionId]) => {
       if (typeof enabled !== 'boolean') throw new TypeError('enabled must be a boolean.');
       return host.setFast(enabled, optionalSessionId(sessionId));

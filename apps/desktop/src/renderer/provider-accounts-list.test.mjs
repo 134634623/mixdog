@@ -611,7 +611,9 @@ test('credit line renders only with credits, formats Codex count vs Claude USD, 
   const toggle = codex().querySelector('[role="switch"]');
   assert.equal(toggle.getAttribute('aria-checked'), 'false');
   await act(async () => toggle.click());
-  assert.ok(calls.some(([c, a]) => c === 'updateProviderAccounts' && a[0] === 'openai-oauth' && a[1].useCredits === true));
+  assert.ok(
+    calls.some(([c, a]) => c === 'updateProviderAccounts' && a[0] === 'openai-oauth' && a[1].useCredits === true)
+  );
   await act(async () => document.querySelector('.sidebar-usage-reset-info').click());
   const items = [...document.querySelectorAll('.sidebar-usage-reset-popover li')];
   assert.equal(items.length, 1);

@@ -60,7 +60,8 @@ async function setup({ mutate, redirect } = {}) {
     return new Response(
       new ReadableStream({
         start(controller) {
-          for (let at = 0; at < body.length; at += 7001) controller.enqueue(new Uint8Array(body.subarray(at, at + 7001)));
+          for (let at = 0; at < body.length; at += 7001)
+            controller.enqueue(new Uint8Array(body.subarray(at, at + 7001)));
           controller.close();
         },
       }),
@@ -189,7 +190,10 @@ test('response types are made safe and non-element requests are not intercepted'
   const svg = lease('pic.svg', 2000, 'image/svg+xml');
   const { get, worker } = await setup();
   assert.equal((await get(page.assetId)).headers.get('content-type'), 'application/octet-stream');
-  assert.equal((await get(svg.assetId, { destination: 'video' })).headers.get('content-type'), 'application/octet-stream');
+  assert.equal(
+    (await get(svg.assetId, { destination: 'video' })).headers.get('content-type'),
+    'application/octet-stream'
+  );
   assert.equal((await get(svg.assetId, { destination: 'image' })).headers.get('content-type'), 'image/svg+xml');
   const url = new URL(`${ORIGIN}/media/0123456789abcdef?sid=${SID}&enc=e2ee1`);
   const request = (overrides) => ({ method: 'GET', mode: 'no-cors', destination: 'video', ...overrides });

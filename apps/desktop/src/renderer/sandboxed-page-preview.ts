@@ -16,9 +16,11 @@ export function openSandboxedPagePreview(srcdoc: string, title: string): () => v
   const overlay = document.createElement('div');
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-label', title);
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;background:#fff';
+  overlay.style.cssText =
+    'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;background:#fff';
   const bar = document.createElement('div');
-  bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 10px;background:#222;color:#fff;font:13px sans-serif';
+  bar.style.cssText =
+    'display:flex;align-items:center;gap:8px;padding:6px 10px;background:#222;color:#fff;font:13px sans-serif';
   const label = document.createElement('span');
   label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
   label.textContent = title;

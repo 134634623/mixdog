@@ -43,7 +43,11 @@ export type SettingsSection = (typeof SETTINGS_ITEMS)[number]['value'];
 type SettingsApi = Partial<DesktopApi>;
 
 export function preloadSettings(api: SettingsApi): Promise<unknown> {
-  return Promise.all([preloadCapabilitySettings(api), preloadGitPanelInfo(api), preloadConnectionInfo(api, undefined, { activate: false })]);
+  return Promise.all([
+    preloadCapabilitySettings(api),
+    preloadGitPanelInfo(api),
+    preloadConnectionInfo(api, undefined, { activate: false }),
+  ]);
 }
 
 export { preloadConnectionInfo };

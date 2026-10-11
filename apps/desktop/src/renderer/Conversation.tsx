@@ -469,25 +469,25 @@ export function Conversation({
               <MarkdownSessionContext.Provider value={draftMode ? '' : String(routeSnapshot.sessionId || '')}>
                 <MarkdownOpenFileContext.Provider value={onOpenFile ?? null}>
                   <MarkdownOpenFolderContext.Provider value={onOpenFolder ?? null}>
-                   <TranscriptDevicesContext.Provider value={multiDevice}>
-                    {showTranscriptTimeline && (
-                      <TranscriptList
-                        key={transcriptIdentity.current}
-                        sessionKey={transcriptSessionKey}
-                        rows={transcriptRows}
-                        viewport={viewport}
-                        content={content}
-                        bottomInset={composerDockHeight}
-                        shouldAnchorBottom={shouldAnchorTranscriptBottom}
-                        markProgrammaticScroll={markTranscriptProgrammaticScroll}
-                        hasScrollGesture={hasTranscriptScrollGesture}
-                        onSelectionAutoScroll={handleTranscriptSelectionAutoScroll}
-                        setAnchorBottomRef={setTranscriptAnchorBottomRef}
-                        scrollToEndRef={scrollToEndRef}
-                        renderRow={renderTranscriptRow}
-                      />
-                    )}
-                   </TranscriptDevicesContext.Provider>
+                    <TranscriptDevicesContext.Provider value={multiDevice}>
+                      {showTranscriptTimeline && (
+                        <TranscriptList
+                          key={transcriptIdentity.current}
+                          sessionKey={transcriptSessionKey}
+                          rows={transcriptRows}
+                          viewport={viewport}
+                          content={content}
+                          bottomInset={composerDockHeight}
+                          shouldAnchorBottom={shouldAnchorTranscriptBottom}
+                          markProgrammaticScroll={markTranscriptProgrammaticScroll}
+                          hasScrollGesture={hasTranscriptScrollGesture}
+                          onSelectionAutoScroll={handleTranscriptSelectionAutoScroll}
+                          setAnchorBottomRef={setTranscriptAnchorBottomRef}
+                          scrollToEndRef={scrollToEndRef}
+                          renderRow={renderTranscriptRow}
+                        />
+                      )}
+                    </TranscriptDevicesContext.Provider>
                   </MarkdownOpenFolderContext.Provider>
                 </MarkdownOpenFileContext.Provider>
               </MarkdownSessionContext.Provider>

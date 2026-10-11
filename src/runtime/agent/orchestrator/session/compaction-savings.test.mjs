@@ -195,7 +195,10 @@ test('reactive context overflow still runs when the token prediction has no savi
   assert.equal(result.reactiveOverflowRetryPending, false);
 });
 
-for (const options of [{ mode: 'auto', force: true }, { mode: 'manual', requireReduction: true }]) {
+for (const options of [
+  { mode: 'auto', force: true },
+  { mode: 'manual', requireReduction: true },
+]) {
   test(`automatic manager path skips without mutating context (${JSON.stringify(options)})`, async () => {
     const session = fixture();
     session.providerState = { previousResponse: 'keep' };
@@ -263,7 +266,12 @@ test('compact on the still-active session rebinds and invalidates', async () => 
     getActiveTurnCount: () => 0,
     setSession: (s) => touched.push(['set', s]),
     invalidateContextStatusCache: () => touched.push(['invalidate']),
-    mgr: { async compactSessionMessages() { return { changed: true }; }, getSession: () => replaced },
+    mgr: {
+      async compactSessionMessages() {
+        return { changed: true };
+      },
+      getSession: () => replaced,
+    },
   });
   assert.equal((await api.compact({ requireReduction: true })).changed, true);
   assert.deepEqual(touched, [['set', replaced], ['invalidate']]);

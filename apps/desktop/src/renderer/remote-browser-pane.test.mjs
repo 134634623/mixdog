@@ -430,7 +430,10 @@ test('a browserParity host adds a tab strip whose selection moves the stream and
     await flush();
     assert.deepEqual(tabsSeen.watch, [true]);
     const selectors = [...document.querySelectorAll('[role="tab"]')];
-    assert.deepEqual(selectors.map((tab) => tab.getAttribute('data-page-id')), ['main-browser-a', 'main-browser-b']);
+    assert.deepEqual(
+      selectors.map((tab) => tab.getAttribute('data-page-id')),
+      ['main-browser-a', 'main-browser-b']
+    );
     assert.equal(state.streams.at(-1)[0], 'main-browser-a');
 
     // Picking the sibling retargets this client's stream, and the old one stops.
@@ -469,6 +472,93 @@ test('a browserParity host adds a tab strip whose selection moves the stream and
   assert.deepEqual(tabsSeen.watch, [true, false]);
 });
 
+function tabHost(list) {
+  const seen = { watch: [], closed: [], log: [] };
+  const stream = window.mixdogDesktop.remoteBrowserStream;
+  Object.assign(window.mixdogDesktop, {
+    remoteBrowserStream: (sessionId, options) => {
+      seen.log.push(`stream:${sessionId}:${options ? 'on' : 'off'}`);
+      return stream(sessionId, options);
+    },
+    remoteBrowserTabs: async (watch) => {
+      seen.watch.push(watch);
+      return list;
+    },
+    onRemoteBrowserTabs: () => () => {},
+    remoteBrowserCloseTab: async (id) => {
+      seen.log.push(`close:${id}`);
+      seen.closed.push(id);
+    },
+  });
+  return seen;
+}
+
+test('closing the streamed tab leaves it for a neighbour and is not restarted after the release', async () => {
+  const state = fakeApi();
+  const seen = tabHost([
+    { id: 'main-browser-a', title: 'Alpha', url: 'https://a.test/', loading: false },
+    { id: 'main-browser-b', title: 'Beta', url: 'https://b.test/', loading: false },
+    { id: 'main-browser-c', title: 'Gamma', url: 'https://c.test/', loading: false },
+  ]);
+  const pane = await mount({ sessionId: 'main-browser-a', active: true });
+  try {
+    await flush();
+    // A sibling that is not streamed closes without moving the stream.
+    const streamed = state.streams.length;
+    await act(async () => document.querySelector('button[aria-label="Close tab: Gamma"]').click());
+    await flush();
+    assert.deepEqual(seen.closed, ['main-browser-c']);
+    assert.equal(state.streams.length, streamed);
+    assert.equal(document.querySelectorAll('[role="tab"]').length, 2);
+
+    seen.log.length = 0;
+    await act(async () => document.querySelector('button[aria-label="Close tab: Alpha"]').click());
+    await flush();
+    assert.deepEqual(seen.closed, ['main-browser-c', 'main-browser-a']);
+    const release = seen.log.indexOf('close:main-browser-a');
+    assert.ok(release >= 0);
+    assert.ok(seen.log.includes('stream:main-browser-a:off'));
+    assert.ok(!seen.log.slice(release).includes('stream:main-browser-a:on'), 'the released page is not restarted');
+    assert.equal(state.streams.at(-1)[0], 'main-browser-b');
+    assert.ok(state.streams.at(-1)[1]);
+    assert.deepEqual(
+      [...document.querySelectorAll('[role="tab"]')].map((tab) => [
+        tab.getAttribute('data-page-id'),
+        tab.getAttribute('aria-selected'),
+      ]),
+      [['main-browser-b', 'true']]
+    );
+    // A frame for the released page no longer reaches this client.
+    await act(async () => state.listener(streamFrame({ sessionId: 'main-browser-a', seq: 7 })));
+    await flush();
+    assert.ok(!state.acks.some(([id]) => id === 'main-browser-a'));
+  } finally {
+    await pane.unmount();
+  }
+});
+
+test('panes share one host-side tab watch that stops with the last pane', async () => {
+  fakeApi();
+  const seen = tabHost([{ id: 'main-browser-a', title: 'Alpha', url: 'https://a.test/', loading: false }]);
+  const first = await mount({ sessionId: 'main-browser-a', active: true });
+  const second = await mount({ sessionId: 'main-browser-b', active: true });
+  try {
+    await flush();
+    assert.deepEqual(seen.watch, [true, true]);
+    await first.unmount();
+    assert.deepEqual(seen.watch, [true, true]);
+    await second.rerender({ sessionId: 'main-browser-b', active: false });
+    assert.deepEqual(seen.watch, [true, true, false]);
+    await second.rerender({ sessionId: 'main-browser-b', active: true });
+    await flush();
+    assert.deepEqual(seen.watch, [true, true, false, true]);
+  } finally {
+    await first.unmount().catch(() => {});
+    await second.unmount();
+  }
+  assert.deepEqual(seen.watch, [true, true, false, true, false]);
+});
+
 test('a host without the tab members keeps the single-stream pane', async () => {
   fakeApi();
   const pane = await mount({ sessionId: 'main-browser-a', active: true });
@@ -498,7 +588,9 @@ test('stored-login suggestions come from the host and filling names only the cre
     const menu = document.querySelector('[aria-label="More actions"]');
     assert.ok(menu, 'the overflow menu appears once a suggestion exists');
     await act(async () => menu.click());
-    const item = [...document.querySelectorAll('[role="menuitem"]')].find((node) => /stored credentials/.test(node.textContent));
+    const item = [...document.querySelectorAll('[role="menuitem"]')].find((node) =>
+      /stored credentials/.test(node.textContent)
+    );
     await act(async () => item.click());
     await flush();
     assert.deepEqual(filled, [['s', 'c'.repeat(24)]]);

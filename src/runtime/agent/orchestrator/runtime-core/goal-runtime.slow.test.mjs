@@ -345,7 +345,10 @@ test('Goal tool schemas expose lifecycle and durable task contracts', () => {
   // triggers now owned by the always-present tool description, without the
   // retired per-task kind field.
   const size = JSON.stringify(goalTool).length;
-  assert.ok(size < 3_700, `goal tool schema is ${size} chars; budget 3700 — trim the description or justify raising the budget`);
+  assert.ok(
+    size < 3_700,
+    `goal tool schema is ${size} chars; budget 3700 — trim the description or justify raising the budget`
+  );
 });
 
 test('a user completes their own Goal without the model evidence gate', async () => {

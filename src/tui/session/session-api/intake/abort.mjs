@@ -1,6 +1,6 @@
-// Abort: Esc while idle hands a queued submission back to the draft; Esc during a turn cancels it and, unless a steering prompt is
-// already queued, reclaims the in-flight prompt, its history slot and its
-// requeue entries.
+// Abort: Esc while idle hands a queued submission back to the draft; Esc
+// during a turn cancels it and, unless a steering prompt is already queued,
+// reclaims the in-flight prompt, its history slot and its requeue entries.
 import { hydratePastedAttachments, hydrateRestorableFileParts } from '../../../../runtime/attachments/store.mjs';
 import { abortGoalTurn } from '../../goal-turn-state.mjs';
 import { promptHistoryWithout } from '../../prompt-history.mjs';

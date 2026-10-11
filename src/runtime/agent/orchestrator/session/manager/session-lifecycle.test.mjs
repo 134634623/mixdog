@@ -197,7 +197,11 @@ test('refreshSessionProviderCacheOpts refreshes builder policies only (resume pa
   };
   assert.equal(refreshSessionProviderCacheOpts(session, config(3_600_000)), true);
   assert.equal(session.providerCacheOpts.cacheStrategy.messages, '1h');
-  const override = { ...session, providerCacheOpts: { cacheStrategy: { messages: '5m' } }, providerCacheOptsOverride: true };
+  const override = {
+    ...session,
+    providerCacheOpts: { cacheStrategy: { messages: '5m' } },
+    providerCacheOptsOverride: true,
+  };
   assert.equal(refreshSessionProviderCacheOpts(override, config(3_600_000)), false);
   assert.equal(override.providerCacheOpts.cacheStrategy.messages, '5m');
 });

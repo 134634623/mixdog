@@ -293,6 +293,21 @@ export function defaultContextPercent(defaultWindow: number, maxWindow: number):
   return Math.max(10, Math.min(100, Math.round((defaultWindow / maxWindow) * 10) * 10));
 }
 
+/** A requested Context percent as a slider stop: a multiple of 10 within 10–100. */
+export function contextSliderPercent(requested: number): number {
+  return Math.max(10, Math.min(100, Math.round(requested / 10) * 10));
+}
+
+/** Tokens a slider stop routes; the default stop keeps the model's own default window. */
+export function contextTokensForPercent(
+  percent: number,
+  contextWindow: { defaultPercent: number; defaultTokens: number; maxTokens: number }
+): number {
+  return percent === contextWindow.defaultPercent
+    ? contextWindow.defaultTokens
+    : Math.floor((contextWindow.maxTokens * percent) / 100);
+}
+
 export const ModelSelector = memo(function ModelSelector({
   provider: sourceProvider,
   model: sourceModel,
@@ -391,17 +406,14 @@ export const ModelSelector = memo(function ModelSelector({
   const defaultContextWindow = known ? modelContextWindow(known) : 0;
   const maxContextWindow = known ? modelMaxContextWindow(known) : 0;
   const contextDefaultPercent = defaultContextPercent(defaultContextWindow, maxContextWindow);
-  const normalizedContextPercent = Math.max(
-    10,
-    Math.min(
-      100,
-      Math.round((Number(contextPercent) || Number(known?.savedContextPercent) || contextDefaultPercent) / 10) * 10
-    )
+  const normalizedContextPercent = contextSliderPercent(
+    Number(contextPercent) || Number(known?.savedContextPercent) || contextDefaultPercent
   );
-  const contextTokens =
-    normalizedContextPercent === contextDefaultPercent
-      ? defaultContextWindow
-      : Math.floor((maxContextWindow * normalizedContextPercent) / 100);
+  const contextTokens = contextTokensForPercent(normalizedContextPercent, {
+    defaultPercent: contextDefaultPercent,
+    defaultTokens: defaultContextWindow,
+    maxTokens: maxContextWindow,
+  });
   const routedModelParameters = routeModelParameters(selectedModelParameters, maxContextWindow);
   const routedParameterFields = Object.keys(routedModelParameters).length
     ? { modelParameters: routedModelParameters }

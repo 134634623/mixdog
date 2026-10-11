@@ -58,7 +58,6 @@ test('a completion queued during a turn drains even when no release edge reaches
   assert.equal(f.turns.length, 1, 'an empty queue stops the re-check');
 });
 
-
 test('a drained prompt row is attributed to the device that submitted it', async () => {
   const f = fixture({ busy: false });
   assert.equal(f.flow.enqueue('from the phone', { id: 'p1', transcriptMeta: { device: 'Pixel' } }), true);

@@ -14,7 +14,9 @@ const {
   changeProviderAccounts,
 } = await import('../runtime/shared/provider-accounts.mjs');
 const { writeJsonAtomicSync } = await import('../runtime/shared/atomic-file.mjs');
-const { forgetProviderAuth, beginOAuthProviderLogin, listProviderAccounts } = await import('../session-runtime/services/provider-admin.mjs');
+const { forgetProviderAuth, beginOAuthProviderLogin, listProviderAccounts } = await import(
+  '../session-runtime/services/provider-admin.mjs'
+);
 after(() => rmSync(dir, { recursive: true, force: true }));
 
 function mockTokenExchange(t, response) {
@@ -184,5 +186,8 @@ test('a remote client logs in without a host browser and completes with the past
 
 test('login options reject a non-boolean openBrowser', async () => {
   const cfg = { loadConfig: () => ({}), saveConfig() {} };
-  await assert.rejects(beginOAuthProviderLogin(cfg, 'openai-oauth', { openBrowser: 'no' }), /Invalid OAuth account login options/);
+  await assert.rejects(
+    beginOAuthProviderLogin(cfg, 'openai-oauth', { openBrowser: 'no' }),
+    /Invalid OAuth account login options/
+  );
 });

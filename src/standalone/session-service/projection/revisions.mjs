@@ -107,7 +107,9 @@ export function createRevisionSteps({ revisionEpoch, index, updateEntryBusy, log
       // keep serving what this address last published and say so once.
       if (entry.addressMismatchLogged !== projectedSessionId) {
         entry.addressMismatchLogged = projectedSessionId;
-        log(`session ${addressedSessionId} changed its durable address to ${projectedSessionId}; serving last snapshot`);
+        log(
+          `session ${addressedSessionId} changed its durable address to ${projectedSessionId}; serving last snapshot`
+        );
       }
       // `current` belongs to ANOTHER conversation and is never served for this
       // address; with no published snapshot left (retention cleared it) the

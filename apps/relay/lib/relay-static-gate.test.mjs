@@ -59,7 +59,13 @@ test('a share POST that outran the worker reopens the app shell', () => {
 test('preview frame is public, sandboxed, cookie-free and frame-able only by self', () => {
   const response = recordingResponse();
   const { recorded } = response;
-  serveStatic('', {}, { allow: () => true }, { method: 'GET', url: '/preview-frame', headers: {}, socket: {} }, response);
+  serveStatic(
+    '',
+    {},
+    { allow: () => true },
+    { method: 'GET', url: '/preview-frame', headers: {}, socket: {} },
+    response
+  );
   const { status, headers, body } = recorded[0];
   assert.equal(status, 200);
   const csp = headers['Content-Security-Policy'];

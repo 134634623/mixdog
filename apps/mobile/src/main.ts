@@ -162,9 +162,11 @@ async function openHost(url: string, redeemed?: { name: string; ticket: string }
 /** Code entry: redeem at the relay, then open the host, which asks the main
  *  PC for approval. */
 async function connectWithCode(): Promise<void> {
-  const code = parseCodeInput(($('code') as HTMLInputElement).value);
+  const input = $<HTMLInputElement>('code');
+  const connect = $<HTMLButtonElement>('connect');
+  const code = parseCodeInput(input.value);
   if (!code) return;
-  ($('connect') as HTMLButtonElement).disabled = true;
+  connect.disabled = true;
   status('');
   const result = await redeemCode(DEFAULT_RELAY_ORIGIN, code, relayFetch);
   if (result.ok) {
@@ -178,14 +180,14 @@ async function connectWithCode(): Promise<void> {
     network: t('codeNetwork'),
   };
   status(messages[result.reason], true);
-  ($('connect') as HTMLButtonElement).disabled = !parseCodeInput(($('code') as HTMLInputElement).value);
+  connect.disabled = !parseCodeInput(input.value);
 }
 
 function showCodeEntry(show: boolean): void {
   $('start').hidden = show;
   $('code-entry').hidden = !show;
   status('');
-  if (show) ($('code') as HTMLInputElement).focus();
+  if (show) $<HTMLInputElement>('code').focus();
 }
 
 async function connectFrom(text: string): Promise<void> {
@@ -281,11 +283,11 @@ async function boot(): Promise<void> {
   await syncOrigins();
   const manage = new URLSearchParams(window.location.search).has('manage');
   $('scan').addEventListener('click', () => void scan());
-  const codeInput = $('code') as HTMLInputElement;
+  const codeInput = $<HTMLInputElement>('code');
   codeInput.addEventListener('input', () => {
     const digits = codeInput.value.replace(/\D/gu, '').slice(0, 6);
     codeInput.value = digits.length > 3 ? `${digits.slice(0, 3)}·${digits.slice(3)}` : digits;
-    ($('connect') as HTMLButtonElement).disabled = digits.length !== 6;
+    $<HTMLButtonElement>('connect').disabled = digits.length !== 6;
   });
   codeInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') void connectWithCode();

@@ -10,11 +10,7 @@ import { remoteClientKind, type RemoteClientKind } from '../../shared/remote-tru
 import { t, uiFormatLocale } from '../i18n';
 import { subscribeSetupChanges } from '../setup-change-refresh';
 import { RemoteHostsPanel } from './remote-hosts-panel';
-import {
-  subscribeConnectionTabRequests,
-  takeConnectionTabRequest,
-  type ConnectionTabId,
-} from './connection-intent';
+import { subscribeConnectionTabRequests, takeConnectionTabRequest, type ConnectionTabId } from './connection-intent';
 import { formatPairCode, remainingFraction, remainingLabel } from './pair-code-format';
 import { ActionButton, Group, ResourceRow } from './capability-controls';
 import type { CapabilityApi } from './capability-data';
@@ -115,11 +111,20 @@ function applyConnectionResult(
 
 type ConnectionTab = ConnectionTabId;
 
-function ConnectionTabs({ tab, onSelect }: { tab: ConnectionTab; onSelect(next: ConnectionTab): void }) {
+function ConnectionTabs({
+  tab,
+  withOther,
+  onSelect,
+}: {
+  tab: ConnectionTab;
+  withOther: boolean;
+  onSelect(next: ConnectionTab): void;
+}) {
   const tabs: Array<[ConnectionTab, string]> = [
-    ['this', t('Connect to this PC')],
-    ['other', t('Connect to another PC')],
+    ['app', t('Mobile')],
+    ['web', t('Web')],
   ];
+  if (withOther) tabs.push(['other', t('Other PC')]);
   return (
     <div className="settings-connection-tabs" role="tablist">
       {tabs.map(([id, label]) => (
@@ -133,14 +138,17 @@ function ConnectionTabs({ tab, onSelect }: { tab: ConnectionTab; onSelect(next: 
 
 const CODE_POLL_MS = 8_000;
 
-/** The 6-digit code exists only while this card is on screen: it is requested
- *  on mount, kept fresh on a heartbeat, and withdrawn on unmount. */
-function usePairCode(api: CapabilityApi): {
+type PairCodeState = {
   code: DesktopRemotePairCode | null;
   unsupported: boolean;
   now: number;
   renew(): void;
-} {
+};
+
+/** The 6-digit code exists only while a tab that shows it is on screen: it is
+ *  requested when shown, kept fresh on a heartbeat, and withdrawn when hidden.
+ *  The Web and Other PC tabs share one code. */
+function usePairCode(api: CapabilityApi, enabled: boolean): PairCodeState {
   const [code, setCode] = useState<DesktopRemotePairCode | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -159,7 +167,7 @@ function usePairCode(api: CapabilityApi): {
       .catch(() => undefined);
   };
   useEffect(() => {
-    if (!request) return undefined;
+    if (!request || !enabled) return undefined;
     let live = true;
     const ensure = () => {
       void request('ensure')
@@ -173,21 +181,18 @@ function usePairCode(api: CapabilityApi): {
       live = false;
       window.clearInterval(poll);
       window.clearInterval(tick);
+      setCode(null);
       void request('release').catch(() => undefined);
     };
-  }, [request]);
+  }, [request, enabled]);
   return { code, unsupported, now, renew };
 }
 
-/** Connect a device: the QR for cameras, the 6-digit code for everything else.
- *  The pairing URL lives only inside the QR; there is no link to copy. */
-function PairingCard({ info, api }: { info: DesktopRemoteAccessInfo; api: CapabilityApi }) {
-  const { code, unsupported, now, renew } = usePairCode(api);
+/** Phone app tab: the QR only. The pairing URL lives inside the QR; there is
+ *  no link to copy. */
+function AppPairingCard({ info }: { info: DesktopRemoteAccessInfo }) {
   return (
-    <Group
-      title={t('Connect a device')}
-      description={t('An approved device gets the same access as this PC.')}
-    >
+    <Group title={t('Mobile')} description={t('An approved device gets the same access as this PC.')}>
       <div className="settings-connection-body">
         <div className="settings-connection-pair">
           <figure className="settings-connection-card">
@@ -199,42 +204,83 @@ function PairingCard({ info, api }: { info: DesktopRemoteAccessInfo; api: Capabi
             <span className="settings-connection-hint">
               {t('Scan with the Mixdog app (Android · iPhone/iPad) or the camera.')}
             </span>
-            {unsupported ? (
-              <span className="settings-connection-hint" role="note">
-                {t("This relay doesn't support codes yet — use the QR code")}
-              </span>
-            ) : code && api.getRemotePairCode ? (
-              <>
-                <span className="settings-connection-hint">{t('PCs and browsers: enter the code')}</span>
-                <div className="settings-pair-code" role="group" aria-label={t('6-digit code')}>
-                  <b>{formatPairCode(code.code)}</b>
-                </div>
-                <div className="settings-pair-timer">
-                  <div className="settings-pair-bar" aria-hidden="true">
-                    <i style={{ width: `${Math.round(remainingFraction(code.expiresAt, now) * 100)}%` }} />
-                  </div>
-                  <span>{t('{{time}} left', { time: remainingLabel(code.expiresAt, now) })}</span>
-                  <ActionButton onClick={renew}>{t('New code')}</ActionButton>
-                </div>
-                {info.relayConnectUrl && (
-                  <span className="settings-connection-hint">
-                    {t('In a browser, open {{url}} and enter the code.', {
-                      url: info.relayConnectUrl.replace(/^https?:\/\//u, ''),
-                    })}
-                  </span>
-                )}
-              </>
-            ) : api.getRemotePairCode ? (
-              <span className="settings-connection-hint" role="status">
-                {t('Getting a code…')}
-              </span>
-            ) : null}
-            {unsupported ? null : (
-              <span className="settings-connection-hint">
-                {t('The code works once, for 5 minutes. This PC must approve every request.')}
-              </span>
-            )}
+            <span className="settings-connection-hint">{t('No camera? Enter the code from the Web tab instead.')}</span>
           </div>
+        </div>
+      </div>
+    </Group>
+  );
+}
+
+/** The 6-digit code with its countdown, shared by the Web and Other PC tabs. */
+function PairCodeBlock({ pair, available }: { pair: PairCodeState; available: boolean }) {
+  const { code, unsupported, now, renew } = pair;
+  if (!available) return null;
+  if (unsupported) {
+    return (
+      <span className="settings-connection-hint" role="note">
+        {t("This relay doesn't support codes yet — use the QR code")}
+      </span>
+    );
+  }
+  if (!code) {
+    return (
+      <span className="settings-connection-hint" role="status">
+        {t('Getting a code…')}
+      </span>
+    );
+  }
+  return (
+    <>
+      <div className="settings-pair-code" role="group" aria-label={t('6-digit code')}>
+        <b>{formatPairCode(code.code)}</b>
+      </div>
+      <div className="settings-pair-timer">
+        <div className="settings-pair-bar" aria-hidden="true">
+          <i style={{ width: `${Math.round(remainingFraction(code.expiresAt, now) * 100)}%` }} />
+        </div>
+        <span>{t('{{time}} left', { time: remainingLabel(code.expiresAt, now) })}</span>
+        <ActionButton onClick={renew}>{t('New code')}</ActionButton>
+      </div>
+      <span className="settings-connection-hint">
+        {t('The code works once, for 5 minutes. This PC must approve every request.')}
+      </span>
+    </>
+  );
+}
+
+/** Web tab: no QR (a browser on a PC cannot scan one), just the address and
+ *  the code. */
+function WebPairingCard({ info, pair, api }: { info: DesktopRemoteAccessInfo; pair: PairCodeState; api: CapabilityApi }) {
+  return (
+    <Group title={t('Web')} description={t('An approved device gets the same access as this PC.')}>
+      <div className="settings-connection-body">
+        <div className="settings-connection-field-group settings-connection-code-card">
+          {info.relayConnectUrl && (
+            <b>
+              {t('In a browser, open {{url}} and enter the code.', {
+                url: info.relayConnectUrl.replace(/^https?:\/\//u, ''),
+              })}
+            </b>
+          )}
+          <PairCodeBlock pair={pair} available={Boolean(api.getRemotePairCode)} />
+        </div>
+      </div>
+    </Group>
+  );
+}
+
+/** Other PC tab, top half: this PC's code, for another PC's Mixdog to enter. */
+function ThisPcCodeCard({ pair, api }: { pair: PairCodeState; api: CapabilityApi }) {
+  if (!api.getRemotePairCode) return null;
+  return (
+    <Group
+      title={t('This PC’s code')}
+      description={t('On the other PC, open Settings → Connection → Other PC and enter this code.')}
+    >
+      <div className="settings-connection-body">
+        <div className="settings-connection-field-group settings-connection-code-card">
+          <PairCodeBlock pair={pair} available />
         </div>
       </div>
     </Group>
@@ -258,7 +304,7 @@ function renderConnectionNote(message: string) {
 
 function renderPairingPlaceholder() {
   return (
-    <Group title={t('Web app')} description={t('Works on any network. Open the secure link in a browser.')}>
+    <Group title={t('Connect a device')}>
       <div className="settings-connection-body">
         <figure
           className="settings-connection-card settings-connection-card--loading"
@@ -280,6 +326,7 @@ function renderPairingPlaceholder() {
 // click arms the button, the second one performs the revocation.
 function renderLinkedDevices({
   info,
+  kind: tabKind,
   api,
   rotating,
   confirmRotate,
@@ -292,6 +339,7 @@ function renderLinkedDevices({
   applyInfo,
 }: {
   info: DesktopRemoteAccessInfo;
+  kind: RemoteClientKind;
   api: CapabilityApi;
   rotating: boolean;
   confirmRotate: boolean;
@@ -303,13 +351,14 @@ function renderLinkedDevices({
   setConfirmClient(value: string): void;
   applyInfo(next: DesktopRemoteAccessInfo | null): void;
 }) {
+  // Each tab lists only the devices that connected its way, with
+  // unpair-everything under any non-empty list.
+  const clients = info.clients.filter((client) => remoteClientKind(client.browser) === tabKind);
+  if (clients.length === 0) return null;
   return (
-    <Group
-      title={t('Connected devices')}
-      description={t('Devices stay connected until you unpair them here.')}
-    >
+    <Group title={t('Connected devices')} description={t('Devices stay connected until you unpair them here.')}>
       <div className="settings-resource-list">
-        {info.clients.map((client) => {
+        {clients.map((client) => {
           const lastSeen = client.lastSeenAt
             ? new Date(client.lastSeenAt).toLocaleString(uiFormatLocale())
             : t('Never');
@@ -320,12 +369,10 @@ function renderLinkedDevices({
               key={client.id}
               leading={<Icon size={15} aria-label={kindLabel(kind)} />}
               title={client.name || `${client.platform || t('Device')} · ${client.browser || t('Browser')}`}
-              meta={
-                t('Added {{created}} · Last used {{lastSeen}}', {
-                  created: new Date(client.createdAt).toLocaleDateString(uiFormatLocale()),
-                  lastSeen,
-                })
-              }
+              meta={t('Added {{created}} · Last used {{lastSeen}}', {
+                created: new Date(client.createdAt).toLocaleDateString(uiFormatLocale()),
+                lastSeen,
+              })}
               status={client.online ? 'Online' : 'Offline'}
               actions={
                 <ActionButton
@@ -383,7 +430,7 @@ export function ConnectionPanel({ api }: { api: CapabilityApi }) {
   const [revokingClient, setRevokingClient] = useState('');
   const [confirmClient, setConfirmClient] = useState('');
   const [stalledAttempts, setStalledAttempts] = useState(0);
-  const [tab, setTab] = useState<ConnectionTab>(() => takeConnectionTabRequest() ?? 'this');
+  const [tab, setTab] = useState<ConnectionTab>(() => takeConnectionTabRequest() ?? 'app');
   useEffect(
     () =>
       subscribeConnectionTabRequests(() => {
@@ -399,6 +446,9 @@ export function ConnectionPanel({ api }: { api: CapabilityApi }) {
   };
 
   useConnectionInfoUpdates({ api, ready, applyInfo, setInfo, setStalledAttempts });
+  const withOther = Boolean(api.connectRemoteHostByCode);
+  const shown: ConnectionTab = tab === 'other' && !withOther ? 'app' : tab;
+  const pair = usePairCode(api, ready && shown !== 'app');
 
   if (!api.getRemoteAccessInfo) {
     const remoteServer = (window as unknown as { mixdogRemoteServer?: string }).mixdogRemoteServer;
@@ -420,51 +470,70 @@ export function ConnectionPanel({ api }: { api: CapabilityApi }) {
           <ResourceRow
             title={t('Switch PC / pair another PC')}
             description={t('Go back to the Mixdog app’s start screen to pick another paired PC or scan a new QR code.')}
-            actions={<ActionButton onClick={() => void native.call?.('openHostPicker').catch(() => undefined)}>{t('Switch PC')}</ActionButton>}
+            actions={
+              <ActionButton onClick={() => void native.call?.('openHostPicker').catch(() => undefined)}>
+                {t('Switch PC')}
+              </ActionButton>
+            }
           />
         </Group>
       </>
     );
   }
 
-  // Connecting OUT to another PC does not depend on this PC's own relay, so
-  // its tab works while this PC's pairing card is still waiting on the relay.
-  const withTabs = (thisPc: ReactNode) =>
-    api.connectRemoteHostByCode ? (
-      <>
-        <ConnectionTabs tab={tab} onSelect={setTab} />
-        <div role="tabpanel" className="settings-connection-panel">
-          {tab === 'other' ? <RemoteHostsPanel api={api} /> : thisPc}
-        </div>
-      </>
-    ) : (
-      thisPc
-    );
+  const withTabs = (content: ReactNode) => (
+    <>
+      <ConnectionTabs tab={shown} withOther={withOther} onSelect={setTab} />
+      <div role="tabpanel" className="settings-connection-panel">
+        {content}
+      </div>
+    </>
+  );
+  const waiting =
+    stalledAttempts >= CONNECTION_STALLED_ATTEMPTS
+      ? renderConnectionNote(t(RELAY_CONNECTING_MESSAGE))
+      : renderPairingPlaceholder();
   if (!ready) {
-    return withTabs(
-      stalledAttempts >= CONNECTION_STALLED_ATTEMPTS
-        ? renderConnectionNote(t(RELAY_CONNECTING_MESSAGE))
-        : renderPairingPlaceholder()
-    );
+    // Connecting OUT to another PC does not depend on this PC's own relay, so
+    // that half of its tab works while this PC is still waiting on the relay.
+    return withTabs(shown === 'other' ? <RemoteHostsPanel api={api} /> : waiting);
   }
 
+  const devices = renderLinkedDevices({
+    info,
+    kind: shown === 'web' ? 'browser' : shown === 'other' ? 'pc' : 'app',
+    api,
+    rotating,
+    confirmRotate,
+    revokingClient,
+    confirmClient,
+    setRotating,
+    setConfirmRotate,
+    setRevokingClient,
+    setConfirmClient,
+    applyInfo,
+  });
+  if (shown === 'web') {
+    return withTabs(
+      <>
+        <WebPairingCard info={info} pair={pair} api={api} />
+        {devices}
+      </>
+    );
+  }
+  if (shown === 'other') {
+    return withTabs(
+      <>
+        <ThisPcCodeCard pair={pair} api={api} />
+        <RemoteHostsPanel api={api} />
+        {devices}
+      </>
+    );
+  }
   return withTabs(
     <>
-      <PairingCard info={info} api={api} />
-      {info.clients.length > 0 &&
-        renderLinkedDevices({
-          info,
-          api,
-          rotating,
-          confirmRotate,
-          revokingClient,
-          confirmClient,
-          setRotating,
-          setConfirmRotate,
-          setRevokingClient,
-          setConfirmClient,
-          applyInfo,
-        })}
+      <AppPairingCard info={info} />
+      {devices}
     </>
   );
 }

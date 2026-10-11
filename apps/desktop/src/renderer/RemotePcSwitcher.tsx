@@ -7,6 +7,13 @@ import { t, uiFormatLocale } from './i18n';
 import { isRemoteBrowserRenderer } from './remote-ui-projection';
 import { loadWebSwitcherPcs, type SwitcherPc } from './remote-saved-pcs';
 
+/** " · In use" for the PC being driven, else when it was last connected. */
+function switcherPcDetail(pc: SwitcherPc): string {
+  if (pc.current) return ` · ${t('In use')}`;
+  if (!pc.lastConnectedAt) return '';
+  return ` · ${new Date(pc.lastConnectedAt).toLocaleDateString(uiFormatLocale())}`;
+}
+
 /** Top-bar PC switcher for a remote UI (phone, other-PC window, browser): the
  *  PC being driven, a "Remote" badge, and — with more than one saved PC — a
  *  menu to switch. Settings shown here belong to the connected PC. */
@@ -57,8 +64,9 @@ export function RemotePcSwitcher() {
 
   const connectAnother = (): void => {
     setOpen(false);
+    const native = nativeAppInfo();
     if (bridge) void bridge.manageConnections();
-    else if (nativeAppInfo()?.call) void nativeAppInfo()?.call?.('openHostPicker').catch(() => undefined);
+    else if (native?.call) void native.call('openHostPicker').catch(() => undefined);
     else location.assign('/connect');
   };
   const switchTo = (pc: SwitcherPc): void => {
@@ -105,11 +113,7 @@ export function RemotePcSwitcher() {
                 {pc.name || t('This PC')}
                 <small>
                   {pc.online === true ? t('Online') : t('Offline')}
-                  {pc.current
-                    ? ` · ${t('In use')}`
-                    : pc.lastConnectedAt
-                      ? ` · ${new Date(pc.lastConnectedAt).toLocaleDateString(uiFormatLocale())}`
-                      : ''}
+                  {switcherPcDetail(pc)}
                 </small>
               </span>
               {pc.current && <Check size={14} aria-hidden="true" />}

@@ -5,7 +5,7 @@ import { viewIsStale } from './remote-view-staleness.ts';
 
 const user = (id, device) => ({ id, kind: 'user', device });
 
-test('a view missing another device\'s prompt is stale', () => {
+test("a view missing another device's prompt is stale", () => {
   const held = [user('u1', 'Main PC')];
   const latest = [user('u1', 'Main PC'), user('u2', 'Main PC')];
   assert.equal(viewIsStale(held, latest, 'Pixel'), true);

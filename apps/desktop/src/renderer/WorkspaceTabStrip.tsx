@@ -408,11 +408,7 @@ function workspaceTabContextMenu({
                 {
                   label: t('Reveal in Explorer'),
                   run: () => {
-                    void window.mixdogDesktop?.revealFile?.(
-                      fileTarget.project,
-                      fileTarget.rel,
-                      fileTarget.accessToken
-                    );
+                    void window.mixdogDesktop?.revealFile?.(fileTarget.project, fileTarget.rel, fileTarget.accessToken);
                   },
                 },
               ]),

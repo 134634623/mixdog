@@ -196,6 +196,9 @@ export function settingsCategoryForSurface(
   return remote && !hostOpenAccess && LEGACY_REMOTE_HIDDEN_SETTINGS_CATEGORIES.has(category) ? 'general' : category;
 }
 
-export function settingsCategoriesForSurface(remote: boolean, hostOpenAccess = false): ReadonlyArray<SettingsCategoryItem> {
+export function settingsCategoriesForSurface(
+  remote: boolean,
+  hostOpenAccess = false
+): ReadonlyArray<SettingsCategoryItem> {
   return remote && !hostOpenAccess ? LEGACY_REMOTE_SETTINGS_CATEGORIES : LOCAL_SETTINGS_CATEGORIES;
 }

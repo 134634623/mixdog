@@ -245,24 +245,20 @@ export function installNativePushBridge(
   if (!nativeAppInfo()?.call) return () => {};
   const sync = (): void => void syncNativePush();
   const drain = (): void => void drainNativeNotificationActions({ api: deps.api });
-  const onNativeEvent = (): void => {
+  const syncAndDrain = (): void => {
     sync();
     drain();
   };
   const onVisible = (): void => {
     if (document.visibilityState === 'visible') drain();
   };
-  const onReady = (): void => {
-    sync();
-    drain();
-  };
-  window.addEventListener(REMOTE_CONNECTION_READY_EVENT, onReady);
-  window.addEventListener(NATIVE_PUSH_EVENT, onNativeEvent);
+  window.addEventListener(REMOTE_CONNECTION_READY_EVENT, syncAndDrain);
+  window.addEventListener(NATIVE_PUSH_EVENT, syncAndDrain);
   document.addEventListener('visibilitychange', onVisible);
   drain();
   return () => {
-    window.removeEventListener(REMOTE_CONNECTION_READY_EVENT, onReady);
-    window.removeEventListener(NATIVE_PUSH_EVENT, onNativeEvent);
+    window.removeEventListener(REMOTE_CONNECTION_READY_EVENT, syncAndDrain);
+    window.removeEventListener(NATIVE_PUSH_EVENT, syncAndDrain);
     document.removeEventListener('visibilitychange', onVisible);
   };
 }

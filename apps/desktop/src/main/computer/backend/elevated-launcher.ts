@@ -45,7 +45,9 @@ function elevatedLauncherCommand(): string {
     // CIM reads an elevated process's creation time across the integrity boundary,
     // the same source the host verifies against. A worker already gone reports none.
     '  $created = (Get-CimInstance Win32_Process -Filter ("ProcessId=" + $process.Id)).CreationDate',
-    "  if ($null -ne $created) { [Console]::Out.WriteLine('" + WORKER_IDENTITY_MARKER + "' + $process.Id + ':' + $created.ToUniversalTime().Ticks) }",
+    "  if ($null -ne $created) { [Console]::Out.WriteLine('" +
+      WORKER_IDENTITY_MARKER +
+      "' + $process.Id + ':' + $created.ToUniversalTime().Ticks) }",
     '  $process.WaitForExit()',
     '  exit $process.ExitCode',
     '} catch {',

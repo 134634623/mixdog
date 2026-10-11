@@ -43,7 +43,10 @@ test('ranged reads return the requested window as base64 and clamp at EOF', asyn
 });
 
 test('reads are bounded and validated', async () => {
-  await assert.rejects(methods.previewProjectFileRange([root, 'clip.mp4', null, 0, REMOTE_PREVIEW_MAX_READ_BYTES + 1]), /length/);
+  await assert.rejects(
+    methods.previewProjectFileRange([root, 'clip.mp4', null, 0, REMOTE_PREVIEW_MAX_READ_BYTES + 1]),
+    /length/
+  );
   await assert.rejects(methods.previewProjectFileRange([root, 'clip.mp4', null, -1, 4]), /offset/);
 });
 

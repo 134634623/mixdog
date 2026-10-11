@@ -102,7 +102,9 @@ test('project row context menu edits, and Remove opens the editor with confirmat
   const settle = () => act(async () => new Promise((resolve) => window.setTimeout(resolve, 20)));
 
   await act(async () =>
-    row().dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 6 }))
+    row().dispatchEvent(
+      new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 6 })
+    )
   );
   assert.deepEqual(
     items().map((item) => item.textContent),
@@ -115,7 +117,9 @@ test('project row context menu edits, and Remove opens the editor with confirmat
   await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Cancel').click());
 
   await act(async () =>
-    row().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }))
+    row().dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true })
+    )
   );
   await act(async () => items()[1].click());
   await settle();

@@ -150,10 +150,58 @@ test('an edit whose Markdown would not read back is held, never written and neve
   assert.equal(model.getValue(), '| A |\n| --- |\n| changed |\n');
   // Only an explicit discard drops it and loads the file.
   sync.discard();
-  assert.deepEqual(events.slice(-2).map((event) => event.kind), ['held', 'document']);
+  assert.deepEqual(
+    events.slice(-2).map((event) => event.kind),
+    ['held', 'document']
+  );
   assert.equal(events.at(-2).reason, null);
   assert.equal(sync.heldReason, null);
   assert.equal(sync.flush(), true);
+});
+
+test('a held edit can be read as the whole file for backups, front matter and line endings kept', () => {
+  const original = `${FRONT}# T\n\n| A |\n| --- |\n| one |\n\nKeep __this__.\n`.replace(/\n/g, '\r\n');
+  const { sync, events } = start(original);
+  assert.equal(sync.heldMarkdown(), null);
+  const doc = structuredClone(events[0].doc);
+  doc.content[1].content[1].content[0].content.push({ type: 'paragraph', content: [{ type: 'text', text: 'two' }] });
+  assert.equal(sync.commit(doc), false);
+  const held = sync.heldMarkdown();
+  assert.ok(held.startsWith(FRONT.replace(/\n/g, '\r\n')));
+  assert.match(held, /\| one.*two.*\|\r\n/);
+  assert.match(held, /\r\n\r\nKeep __this__\.\r\n$/, 'untouched blocks keep their bytes');
+  sync.discard();
+  assert.equal(sync.heldMarkdown(), null);
+});
+
+test('edits made while held after an outside change still update the held text and its backup', () => {
+  const original = '| A |\n| --- |\n| one |\n';
+  const { model, sync, events } = start(original);
+  const doc = structuredClone(events[0].doc);
+  const cell = doc.content[0].content[1].content[0];
+  cell.content.push({ type: 'paragraph', content: [{ type: 'text', text: 'two' }] });
+  assert.equal(sync.commit(doc), false);
+  model.setValue('| A |\n| --- |\n| changed |\n');
+  const heldBefore = events.filter((event) => event.kind === 'held').length;
+  // Typing on in Rich.
+  cell.content[1].content[0].text = 'two three';
+  assert.equal(sync.commit(doc), false);
+  assert.equal(model.getValue(), '| A |\n| --- |\n| changed |\n', 'the model is not written');
+  assert.equal(model.edits.length, 0);
+  assert.match(sync.heldMarkdown(), /two three/, 'the held text is the latest visible edit');
+  assert.ok(events.filter((event) => event.kind === 'held').length > heldBefore, 'the held edit is reported again');
+  assert.ok(events.at(-1).reason);
+});
+
+test('text rejected and then restored loads the editor again instead of staying unsupported', () => {
+  const { model, sync, events } = start(BODY);
+  model.setValue('<div>raw</div>\n');
+  assert.equal(events.at(-1).kind, 'unsupported');
+  model.setValue(BODY);
+  assert.equal(events.at(-1).kind, 'document');
+  assert.deepEqual(events.at(-1).doc, codec.parse(BODY));
+  sync.refresh();
+  assert.equal(events.at(-1).kind, 'document');
 });
 
 test('a later edit that can be written releases the held one', () => {
@@ -185,6 +233,8 @@ test('ordinary text typed one character at a time reaches the model as that text
     '[ ] box',
     '$x$ math-like',
     'https://example.com/a_b',
+    'https://example.com/$HOME$',
+    'go https://e.com/$a $b$ and $c$',
     'see www.example.com.',
     'mail a_b@example.com',
   ]) {
@@ -230,7 +280,13 @@ test('a single-character edit in a large document is fast: only the changed bloc
   const typical = times.slice(1).sort((a, b) => a - b)[2];
   assert.ok(typical < 250, `single-character commits took ${times.map((time) => time.toFixed(1)).join(', ')} ms`);
   const middle = Math.floor(count / 2);
-  assert.equal(model.getValue(), text.replace(`Some __bold__ text with *emphasis*, \`code\` and a [link](https://example.com/${middle})`, `Some xxxxxx**bold** text with *emphasis*, \`code\` and a [link](https://example.com/${middle})`));
+  assert.equal(
+    model.getValue(),
+    text.replace(
+      `Some __bold__ text with *emphasis*, \`code\` and a [link](https://example.com/${middle})`,
+      `Some xxxxxx**bold** text with *emphasis*, \`code\` and a [link](https://example.com/${middle})`
+    )
+  );
   assert.equal(model.edits.length, 6);
 });
 
@@ -313,7 +369,8 @@ test('undo and redo at 250 KB reparse only the blocks they change', () => {
 });
 
 test('changes made elsewhere are applied block by block exactly as a full reload would read them', () => {
-  const initial = '# Title\n\nFirst paragraph.\n\n* one\n* two\n\nMiddle text.\n\n- [ ] task\n\n```js\ncode\n```\n\nLast.\n';
+  const initial =
+    '# Title\n\nFirst paragraph.\n\n* one\n* two\n\nMiddle text.\n\n- [ ] task\n\n```js\ncode\n```\n\nLast.\n';
   const { model, events } = start(initial);
   const edits = [
     (text) => text.replace('Middle text.', '* three'), // joins the list above it

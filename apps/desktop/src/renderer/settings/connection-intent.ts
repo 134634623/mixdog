@@ -1,7 +1,7 @@
 // A request from outside Settings → Connection (a remote window's PC switcher)
-// to land on its "Connect to another PC" tab. The panel may not be mounted yet,
-// so the request waits here until it is.
-export type ConnectionTabId = 'this' | 'other';
+// to land on its "Other PC" tab. The panel may not be mounted yet, so the
+// request waits here until it is.
+export type ConnectionTabId = 'app' | 'web' | 'other';
 
 const EVENT = 'mixdog:connection-tab-request';
 let pending: ConnectionTabId | null = null;

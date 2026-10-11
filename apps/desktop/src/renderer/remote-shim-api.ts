@@ -33,7 +33,15 @@ type BrowserGatedKey =
   | 'browserProfileImportStart'
   | 'onBrowserProfileImportProgress';
 
-export const createRemoteApi =(ctx: RemoteShimContext): DesktopApi => {
+/** Adds `listener` to a host-event set; the returned function removes it. */
+const listenOn = <T>(listeners: Set<T>, listener: T): (() => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
+export const createRemoteApi = (ctx: RemoteShimContext): DesktopApi => {
   const {
     stateListeners,
     sessionsCatalog,
@@ -94,18 +102,8 @@ export const createRemoteApi =(ctx: RemoteShimContext): DesktopApi => {
     addProject: (projectPath) => call('addProject', [projectPath]),
     remoteBrowserStream: (sessionId, options) => call('browserRemoteStream', [sessionId, options]),
     remoteBrowserStreamAck: (sessionId, seq) => fire('browserRemoteStreamAck', [sessionId, seq]),
-    onRemoteBrowserFrame: (listener) => {
-      ctx.remoteBrowserFrameListeners.add(listener);
-      return () => {
-        ctx.remoteBrowserFrameListeners.delete(listener);
-      };
-    },
-    onBrowserOpenRequested: (listener) => {
-      ctx.browserOpenListeners.add(listener);
-      return () => {
-        ctx.browserOpenListeners.delete(listener);
-      };
-    },
+    onRemoteBrowserFrame: (listener) => listenOn(ctx.remoteBrowserFrameListeners, listener),
+    onBrowserOpenRequested: (listener) => listenOn(ctx.browserOpenListeners, listener),
     remoteBrowserControl: (sessionId, input) => call('browserRemoteControl', [sessionId, input]),
     renameProject: (projectPath, alias) => call('renameProject', [projectPath, alias]),
     removeProject: (projectPath) => call('removeProject', [projectPath]),
@@ -201,12 +199,7 @@ export const createRemoteApi =(ctx: RemoteShimContext): DesktopApi => {
     searchProjectFiles: (projectIdOrWorkspaceId, query, limit, includeIgnored) =>
       call('searchProjectFiles', [projectIdOrWorkspaceId, query, limit, includeIgnored === true]),
     getSnapshot: () => call('getSnapshot'),
-    subscribeState: (listener) => {
-      stateListeners.add(listener);
-      return () => {
-        stateListeners.delete(listener);
-      };
-    },
+    subscribeState: (listener) => listenOn(stateListeners, listener),
     termEnsure: (id, cwd, shell) => call('termEnsure', [id, cwd ?? null, shell ?? null]),
     termProfiles: () => call('termProfiles'),
     termWrite: (id, data) => fire('termWrite', [id, data]),
@@ -286,12 +279,7 @@ export const createRemoteApi =(ctx: RemoteShimContext): DesktopApi => {
     // Always registered: a page can mount before the handshake says whether the
     // host has remoteParity, and reconnects never re-subscribe. An older host
     // simply never emits the event.
-    subscribeUpdaterState: (listener) => {
-      ctx.updaterListeners.add(listener);
-      return () => {
-        ctx.updaterListeners.delete(listener);
-      };
-    },
+    subscribeUpdaterState: (listener) => listenOn(ctx.updaterListeners, listener),
     trashProjectEntry: (projectPath, relPath) =>
       parity() ? call('trashProjectEntry', [projectPath, relPath]) : LEGACY_HOST_FALLBACKS.trashProjectEntry(),
     browserReleasePage: (pageId) =>
@@ -343,33 +331,18 @@ export const createRemoteApi =(ctx: RemoteShimContext): DesktopApi => {
     updateSetting: (key, enabled) => call('updateSetting', [key, enabled]),
     readActivityRailPins: () => call('readActivityRailPins'),
     updateActivityRailPins: (pins) => call('updateActivityRailPins', [pins]),
-    subscribeActivityRailPins: (listener) => {
-      ctx.activityRailPinsListeners.add(listener);
-      return () => {
-        ctx.activityRailPinsListeners.delete(listener);
-      };
-    },
+    subscribeActivityRailPins: (listener) => listenOn(ctx.activityRailPinsListeners, listener),
     notifyProviderModelsChanged: (origin) => fire('notifyProviderModelsChanged', [origin]),
-    subscribeProviderModelsChanged: (listener) => {
-      ctx.providerModelsListeners.add(listener);
-      return () => {
-        ctx.providerModelsListeners.delete(listener);
-      };
-    },
+    subscribeProviderModelsChanged: (listener) => listenOn(ctx.providerModelsListeners, listener),
     invokeCapability: <T = unknown>(request: DesktopCapabilityRequest) =>
       call<DesktopCapabilityResult<T>>('invokeCapability', [request]),
     readCapabilities: (requests) => call('readCapabilities', [requests]),
+    // Always present: settings pages subscribe once at mount, possibly before
+    // the handshake. An older host simply never emits the event.
+    subscribeSettingsChanged: (listener) => listenOn(ctx.settingsChangedListeners, listener),
     // Gallery bytes ride HTTP, not this socket: the browser caches tiles and
     // asks for byte ranges when a clip seeks. A host that does not serve the
     // lane answers 404 and the caller falls back to the RPC payload.
-    // Always present: settings pages subscribe once at mount, possibly before
-    // the handshake. An older host simply never emits the event.
-    subscribeSettingsChanged: (listener) => {
-      ctx.settingsChangedListeners.add(listener);
-      return () => {
-        ctx.settingsChangedListeners.delete(listener);
-      };
-    },
     // '' (no byte lane) unless the host serves the encrypted lane and the
     // service worker that decrypts it controls this page.
     mediaUrl: (assetId, variant) => laneUrl(assetId, variant),
@@ -403,23 +376,13 @@ export const createRemoteApi =(ctx: RemoteShimContext): DesktopApi => {
     remoteBrowserTabs: (watch) => call('browserRemoteTabs', [watch]),
     remoteBrowserOpenTab: (url) => call('browserRemoteTabOpen', [url]),
     remoteBrowserCloseTab: (id) => call('browserRemoteTabClose', [id]),
-    onRemoteBrowserTabs: (listener) => {
-      ctx.remoteBrowserTabListeners.add(listener);
-      return () => {
-        ctx.remoteBrowserTabListeners.delete(listener);
-      };
-    },
+    onRemoteBrowserTabs: (listener) => listenOn(ctx.remoteBrowserTabListeners, listener),
     browserHistorySearch: (query) => call('browserHistorySearch', [query]),
     browserCredentialSuggestions: (sessionId) => call('browserCredentialSuggestions', [sessionId]),
     browserCredentialFill: (sessionId, credentialId) => call('browserCredentialFill', [sessionId, credentialId]),
     browserProfileImportSources: () => call('browserProfileImportSources'),
     browserProfileImportStart: (request) => call('browserProfileImportStart', [request]),
-    onBrowserProfileImportProgress: (listener) => {
-      ctx.browserImportProgressListeners.add(listener);
-      return () => {
-        ctx.browserImportProgressListeners.delete(listener);
-      };
-    },
+    onBrowserProfileImportProgress: (listener) => listenOn(ctx.browserImportProgressListeners, listener),
   };
   for (const key of Object.keys(browserGated) as BrowserGatedKey[]) {
     Object.defineProperty(api, key, {

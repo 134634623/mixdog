@@ -7,7 +7,7 @@ import { nativeAppInfo } from '../shared/native-app';
 import { MIXDOG_APP_CLIENT_BROWSER, MIXDOG_DESKTOP_CLIENT_BROWSER } from '../shared/remote-trust';
 import { remoteWindowInfo } from '../shared/remote-window';
 
-export const newBrowserId =(): string => {
+export const newBrowserId = (): string => {
   try {
     return crypto.randomUUID();
   } catch {
@@ -68,7 +68,11 @@ export const browserProfile = async (): Promise<{ name: string; platform: string
   }
   // The phone app is a native shell around this page: name it as the app.
   if (nativeAppInfo()) {
-    return { name: `${model || platform} · ${MIXDOG_APP_CLIENT_BROWSER}`, platform, browser: MIXDOG_APP_CLIENT_BROWSER };
+    return {
+      name: `${model || platform} · ${MIXDOG_APP_CLIENT_BROWSER}`,
+      platform,
+      browser: MIXDOG_APP_CLIENT_BROWSER,
+    };
   }
   // "Pixel 8 · Chrome" when the device is known; "Android · Chrome" otherwise.
   return { name: `${model || platform} · ${browser}`, platform, browser };

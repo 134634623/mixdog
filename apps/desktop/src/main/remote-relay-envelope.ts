@@ -42,7 +42,10 @@ export function createRelayEnvelopeDispatcher(
       if (typeof envelope.clientId === 'string') {
         // The relay names the credential it authenticated for this leg; an
         // older relay omits it and the leg simply stays untrusted.
-        deps.onClientOpen(envelope.clientId, typeof envelope.browserClientId === 'string' ? envelope.browserClientId : '');
+        deps.onClientOpen(
+          envelope.clientId,
+          typeof envelope.browserClientId === 'string' ? envelope.browserClientId : ''
+        );
       }
       return;
     }

@@ -846,7 +846,7 @@
   --tool-item-band: 32px;
   background:
     linear-gradient(var(--mx-border), var(--mx-border)) 0 calc(var(--tool-item-band) - var(--mx-hairline)) / 100%
-      var(--mx-hairline) no-repeat,
+    var(--mx-hairline) no-repeat,
     linear-gradient(var(--mx-surface-plate), var(--mx-surface-plate)) 0 0 / 100% var(--tool-item-band) no-repeat;
 }
 .tool-activity-item[data-open="true"] .tool-activity-item-body-inner {

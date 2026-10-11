@@ -56,6 +56,11 @@ function projectAddDialog({
   onChooseFolder(): Promise<string | null>;
   onCreateProject(path: string, name: string): Promise<void>;
 }) {
+  const acceptFolder = (selected: string) => {
+    setAddPath(selected);
+    setAddName((current) => (current.trim() ? current : displayProjectFolder(selected)));
+    setAddError('');
+  };
   return (
     <ExtensionDetailDialog
       width="compact"
@@ -101,8 +106,9 @@ function projectAddDialog({
       <ExtensionField as="div" label={t('Folder')} note={t('Folder opened for this project.')}>
         <div className="projects-folder-row">
           <code>{addPath || t('No folder selected')}</code>
-          {/* Folder comes from the OS chooser only (user decision):
-            prefill the Name with the folder's basename once picked. */}
+          {/* Folder comes from a chooser only (user decision) — the OS dialog,
+            or the in-app host browser on a remote surface: prefill the Name
+            with the folder's basename once picked. */}
           <button
             type="button"
             className="extensions-action"
@@ -114,10 +120,7 @@ function projectAddDialog({
                 return;
               }
               void onChooseFolder().then((selected) => {
-                if (!selected) return;
-                setAddPath(selected);
-                setAddName((current) => (current.trim() ? current : displayProjectFolder(selected)));
-                setAddError('');
+                if (selected) acceptFolder(selected);
               });
             }}
           >
@@ -130,9 +133,7 @@ function projectAddDialog({
             onCancel={() => setBrowsing(false)}
             onSelect={(selected) => {
               setBrowsing(false);
-              setAddPath(selected);
-              setAddName((current) => (current.trim() ? current : displayProjectFolder(selected)));
-              setAddError('');
+              acceptFolder(selected);
             }}
           />
         )}
@@ -185,14 +186,17 @@ export function ProjectListSection({
       label,
       ...point,
       items: [
-        { id: 'edit', label: t('Edit'), onSelect: () => window.setTimeout(() => editorRef.current?.open(project.path), 0) },
+        {
+          id: 'edit',
+          label: t('Edit'),
+          onSelect: () => window.setTimeout(() => editorRef.current?.open(project.path), 0),
+        },
         {
           id: 'remove',
           label: t('Remove'),
           danger: true,
           separatorBefore: true,
-          onSelect: () =>
-            window.setTimeout(() => editorRef.current?.open(project.path, { confirmRemove: true }), 0),
+          onSelect: () => window.setTimeout(() => editorRef.current?.open(project.path, { confirmRemove: true }), 0),
         },
       ],
     });

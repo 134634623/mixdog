@@ -21,7 +21,12 @@ function fixture({ foreground = false, enabled = true } = {}) {
   const keys = generateWebPushKeys();
   const entry = subscription();
   const notifier = createPushNotifier({
-    store: { keys: async () => keys, list: async () => [entry], remove: async () => true, removeByClient: async () => true },
+    store: {
+      keys: async () => keys,
+      list: async () => [entry],
+      remove: async () => true,
+      removeByClient: async () => true,
+    },
     isEnabled: () => enabled,
     readFinalAnswer: async () => null,
     isClientForeground: () => foreground,
@@ -114,7 +119,11 @@ test('input-needed push obeys the same gates as approvals', async (t) => {
 test('an approval and an input wait on the same session are separate pushes', async (t) => {
   const f = fixture();
   t.after(() => f.notifier.dispose());
-  f.notifier.onSessionState({ sessionId: 's1', frameSource: 'live', snapshot: { toolApproval: { id: 'a1' }, goal: parked() } });
+  f.notifier.onSessionState({
+    sessionId: 's1',
+    frameSource: 'live',
+    snapshot: { toolApproval: { id: 'a1' }, goal: parked() },
+  });
   await settle();
   assert.equal(f.sent.length, 2);
 });

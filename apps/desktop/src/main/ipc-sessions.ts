@@ -58,8 +58,10 @@ export function registerSessionIpc({
     host.searchSessionContent(requiredSessionContentQuery(query))
   );
   // Settings → Connection: pairing card (null while the bridge is off).
-  handle(DESKTOP_IPC.remoteAccessInfo, (_event, options) =>
-    remoteAccessInfo?.({ activate: (options as { activate?: unknown } | undefined)?.activate !== false }) ?? null
+  handle(
+    DESKTOP_IPC.remoteAccessInfo,
+    (_event, options) =>
+      remoteAccessInfo?.({ activate: (options as { activate?: unknown } | undefined)?.activate !== false }) ?? null
   );
   handle(DESKTOP_IPC.rotateRemoteAccess, () => rotateRemoteAccess?.() ?? null);
   handle(
@@ -70,19 +72,16 @@ export function registerSessionIpc({
   handle(DESKTOP_IPC.remotePairCode, (_event, action) =>
     invokeDesktopOperation('remoteAccessPairCode', [action === 'renew' || action === 'release' ? action : 'ensure'])
   );
+  const requiredRemoteHosts = (): RemoteHostWindows => {
+    if (!remoteHosts) throw new Error('Connecting to another PC is unavailable.');
+    return remoteHosts;
+  };
   handle(DESKTOP_IPC.listRemoteHosts, () => remoteHosts?.list() ?? []);
-  handle(DESKTOP_IPC.connectRemoteHostByCode, (_event, code) => {
-    if (!remoteHosts) throw new Error('Connecting to another PC is unavailable.');
-    return remoteHosts.connectByCode(requiredString(code, 'code', 16));
-  });
-  handle(DESKTOP_IPC.openRemoteHost, (_event, id) => {
-    if (!remoteHosts) throw new Error('Connecting to another PC is unavailable.');
-    return remoteHosts.open(requiredString(id, 'id', 64));
-  });
-  handle(DESKTOP_IPC.forgetRemoteHost, (_event, id) => {
-    if (!remoteHosts) throw new Error('Connecting to another PC is unavailable.');
-    return remoteHosts.forget(requiredString(id, 'id', 64));
-  });
+  handle(DESKTOP_IPC.connectRemoteHostByCode, (_event, code) =>
+    requiredRemoteHosts().connectByCode(requiredString(code, 'code', 16))
+  );
+  handle(DESKTOP_IPC.openRemoteHost, (_event, id) => requiredRemoteHosts().open(requiredString(id, 'id', 64)));
+  handle(DESKTOP_IPC.forgetRemoteHost, (_event, id) => requiredRemoteHosts().forget(requiredString(id, 'id', 64)));
   handle(DESKTOP_IPC.listRemoteClientClaims, () => invokeDesktopOperation('remoteAccessListClaims', []));
   // The approval itself: this answer is what mints the asking app's credential,
   handle(DESKTOP_IPC.resolveRemoteClientClaim, async (_event, claimId, approved) => {

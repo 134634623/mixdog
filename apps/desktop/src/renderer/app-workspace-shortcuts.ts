@@ -8,7 +8,7 @@
 // mod+Up/Down focus the pane directly above/below (both pairs stay with a
 // focused code editor: word jumps and line scrolling are editing keys) ·
 // mod+P Quick Open · shift+mod+P Command Palette ·
-// mod+, settings · mod+B left sidebar · alt+mod+B right utility dock ·
+// mod+, settings · mod+B right utility dock · shift+mod+B left sidebar ·
 // mod+J panel · mod+O expand/collapse all tool activity (not in a code
 // editor or terminal) ·
 // shift+mod+F find in files · mod+W and ctrl+Q close ·

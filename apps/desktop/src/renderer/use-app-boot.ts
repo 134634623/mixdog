@@ -307,9 +307,7 @@ export function useAppWorkspaceWarmup({
   }, [ready, sessions, workspace.focusedLeafId, workspace.leaves]);
   // Code may warm on a normal remote link; it is cached independently of transcripts.
   useEffect(() => {
-    if (!ready) return undefined;
-    const nativeSurface = isNativeDesktopWindow();
-    if (!nativeSurface && connectionQuality() !== 'normal') return undefined;
+    if (!ready || backgroundWarmupThrottled()) return undefined;
     const queue = workspace.leaves.flatMap((leaf) => [...leaf.tabs]);
     if (queue.length === 0) return undefined;
     const cancels = queue.map((selection, index) =>

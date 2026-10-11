@@ -38,7 +38,12 @@ export function isNativePushPublicKey(value: unknown): value is string {
   try {
     // Throws for a point that is not on the curve.
     createPublicKey({
-      key: { kty: 'EC', crv: 'P-256', x: raw.subarray(1, 33).toString('base64url'), y: raw.subarray(33).toString('base64url') },
+      key: {
+        kty: 'EC',
+        crv: 'P-256',
+        x: raw.subarray(1, 33).toString('base64url'),
+        y: raw.subarray(33).toString('base64url'),
+      },
       format: 'jwk',
     });
     return true;

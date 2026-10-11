@@ -83,12 +83,11 @@ export function createSpawnPreparer({
   async function createSpawnedSession(plan, spec, prepState) {
     // A sub-100 context share needs the window it selects; a percent alone
     // keeps the full served window.
-    const contextSpec = plan.preset.contextPercent
-      ? (({ contextPercent, selectedContextWindow }) => ({ contextPercent, selectedContextWindow }))(
-          resolveRouteContextState(plan.preset, null)
-        )
-      : {};
-    const sessionSpec = { ...spec, ...contextSpec };
+    const sessionSpec = { ...spec };
+    if (plan.preset.contextPercent) {
+      const { contextPercent, selectedContextWindow } = resolveRouteContextState(plan.preset, null);
+      Object.assign(sessionSpec, { contextPercent, selectedContextWindow });
+    }
     if (sessionSurface?.canonical === true && typeof sessionSurface.createChild === 'function') {
       return sessionSurface.createChild({ spec: sessionSpec, prompt: plan.prompt, tag: plan.tag });
     }

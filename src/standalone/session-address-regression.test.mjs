@@ -51,7 +51,7 @@ test('a cancelled canonical worker never gets a new conversation from its own sh
   const provider = {
     name: 'openai',
     contextWindow: 128000,
-    async send(messages, model, _tools, sendOpts) {
+    async send(messages, model) {
       sends.push({ model, messages: messages.length });
       if (sends.length === 2 && gate) await gate.promise;
       return { content: `answer ${sends.length}`, usage: { inputTokens: 10, outputTokens: 5 } };
@@ -142,7 +142,11 @@ test('a cancelled canonical worker never gets a new conversation from its own sh
       drainSessionStore?.();
       // The memory runtime may try to fetch its own bundle (blocked above); the provider endpoint must never be hit.
       const urls = fetchMock.mock.calls.map((c) => String(c.arguments[0]?.url || c.arguments[0]));
-      assert.deepEqual(urls.filter((url) => url.includes('127.0.0.1')), [], 'no provider network request');
+      assert.deepEqual(
+        urls.filter((url) => url.includes('127.0.0.1')),
+        [],
+        'no provider network request'
+      );
     } finally {
       for (const key of Object.keys(process.env)) delete process.env[key];
       Object.assign(process.env, previousEnv);
@@ -154,7 +158,10 @@ test('a cancelled canonical worker never gets a new conversation from its own sh
     apis.push(api);
     return api;
   };
-  const sessionFiles = () => readdirSync(join(process.env.MIXDOG_DATA_DIR, 'sessions')).filter((f) => f.endsWith('.json')).sort();
+  const sessionFiles = () =>
+    readdirSync(join(process.env.MIXDOG_DATA_DIR, 'sessions'))
+      .filter((f) => f.endsWith('.json'))
+      .sort();
 
   const A = 'sess_worker_address_A';
 
@@ -222,6 +229,10 @@ test('a cancelled canonical worker never gets a new conversation from its own sh
   assert.deepEqual(settled, ['rejected'], 'the queued submission is settled explicitly');
   assert.equal(api.submit('too late'), false);
   assert.equal(api.getState().queued.length, 0);
-  assert.deepEqual(deliveries, [true, true], 'both completions reached the live listener (UI/history) and were handled');
+  assert.deepEqual(
+    deliveries,
+    [true, true],
+    'both completions reached the live listener (UI/history) and were handled'
+  );
   assert.equal(api.getState().sessionId, A);
 });

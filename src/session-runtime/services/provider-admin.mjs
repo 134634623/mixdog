@@ -162,11 +162,14 @@ function availableOAuthProvider(id) {
 
 export function isKnownProvider(provider, config = {}) {
   const id = String(provider || '').trim();
-  return id !== '' && (
-    API_PROVIDER_IDS.has(id) ||
-    BUILTIN_PROVIDER_IDS.has(id) ||
-    !!availableOAuthProvider(id) ||
-    (isCustomProviderId(id) && isCustomProviderConfig(config.providers?.[id]) && config.providers[id].enabled !== false)
+  return (
+    id !== '' &&
+    (API_PROVIDER_IDS.has(id) ||
+      BUILTIN_PROVIDER_IDS.has(id) ||
+      !!availableOAuthProvider(id) ||
+      (isCustomProviderId(id) &&
+        isCustomProviderConfig(config.providers?.[id]) &&
+        config.providers[id].enabled !== false))
   );
 }
 
@@ -692,7 +695,12 @@ async function resolveCustomInput(cfgMod, rawInput, options) {
 }
 
 export async function saveCustomProvider(cfgMod, rawInput) {
-  const { id: existingId, config, typed, apiKey } = await resolveCustomInput(cfgMod, rawInput, { requireModels: false });
+  const {
+    id: existingId,
+    config,
+    typed,
+    apiKey,
+  } = await resolveCustomInput(cfgMod, rawInput, { requireModels: false });
   if (!apiKey) throw new Error('API key is required');
   const id = existingId || `custom-${randomUUID()}`;
   const entry = {
@@ -708,7 +716,10 @@ export async function saveCustomProvider(cfgMod, rawInput) {
   if (typed) saveSecret(account, typed);
   try {
     const current = cfgMod.loadConfig();
-    cfgMod.saveConfig({ ...current, providers: { ...(current.providers || {}), [id]: entry } }, { baseConfig: current });
+    cfgMod.saveConfig(
+      { ...current, providers: { ...(current.providers || {}), [id]: entry } },
+      { baseConfig: current }
+    );
   } catch (error) {
     if (typed) {
       if (previousKey) saveSecret(account, previousKey);
@@ -732,15 +743,18 @@ export function removeCustomProvider(cfgMod, rawId) {
 export async function testCustomProvider(cfgMod, rawInput) {
   const { id, config, apiKey } = await resolveCustomInput(cfgMod, rawInput, { requireModels: false });
   try {
-    const discovery = config.models.length ? { models: config.models } : await discoverCustomProviderModels(cfgMod, rawInput);
+    const discovery = config.models.length
+      ? { models: config.models }
+      : await discoverCustomProviderModels(cfgMod, rawInput);
     if (discovery.error) return { ok: false, phase: 'discovery', error: discovery.error };
     const models = discovery.models;
     const model = models[0]?.id;
-    if (!model) return {
-      ok: false,
-      phase: 'discovery',
-      error: { kind: 'empty', message: 'No models were found for this provider' },
-    };
+    if (!model)
+      return {
+        ok: false,
+        phase: 'discovery',
+        error: { kind: 'empty', message: 'No models were found for this provider' },
+      };
     const { createCustomProvider } = await loadCustomProviderModule();
     const provider = await createCustomProvider(id || 'custom-test', { ...config, apiKey });
     await withTimeout(
@@ -780,7 +794,12 @@ export async function discoverCustomProviderModels(cfgMod, rawInput) {
     return {
       models: [],
       error: {
-        kind: status === 404 || status === 405 ? 'unavailable' : status === 401 || status === 403 ? 'authentication' : 'request',
+        kind:
+          status === 404 || status === 405
+            ? 'unavailable'
+            : status === 401 || status === 403
+              ? 'authentication'
+              : 'request',
         ...(status === undefined ? {} : { status }),
         message: sanitizeCustomError(error, [apiKey]).message,
       },

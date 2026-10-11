@@ -59,10 +59,9 @@ function mediaGet(url, headers = {}) {
 
 test('encrypted media bytes reach the phone exactly as the desktop sent them', () => {
   const { entry, sent, store, desktops } = liveDesktop({ mediaLane: true });
-  const { request, response } = mediaGet(
-    `/media/0123456789abcdef?variant=display&sid=${SID}&enc=e2ee1&token=tok`,
-    { range: 'bytes=65536-131071' }
-  );
+  const { request, response } = mediaGet(`/media/0123456789abcdef?variant=display&sid=${SID}&enc=e2ee1&token=tok`, {
+    range: 'bytes=65536-131071',
+  });
   handleMediaRequest(store, desktops, { allow: () => true }, request, response);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].type, 'media-request');
@@ -72,7 +71,12 @@ test('encrypted media bytes reach the phone exactly as the desktop sent them', (
   const [id] = [...entry.media.keys()];
   // Arbitrary bytes stand in for AES-GCM output: nothing may alter them.
   const ciphertext = Buffer.from(Array.from({ length: 600 }, (_, index) => (index * 37 + 11) & 0xff));
-  forwardMediaFrame(entry, { type: 'media-head', id, status: 200, headers: { 'Content-Type': 'application/octet-stream' } });
+  forwardMediaFrame(entry, {
+    type: 'media-head',
+    id,
+    status: 200,
+    headers: { 'Content-Type': 'application/octet-stream' },
+  });
   forwardMediaFrame(entry, { type: 'media-chunk', id, data: ciphertext.subarray(0, 100).toString('base64') });
   forwardMediaFrame(entry, { type: 'media-chunk', id, data: ciphertext.subarray(100).toString('base64') });
   forwardMediaFrame(entry, { type: 'media-end', id });

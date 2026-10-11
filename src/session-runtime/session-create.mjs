@@ -75,7 +75,12 @@ export function createSessionCreator(deps, routes) {
     materializeSession(deps, reason, coreMemoryContext);
     await dispatchSessionStart(deps, reason, signal);
     assertAdmissionOpen(rt);
-    if (!rt.session) throw new SessionClosedError(rt.addressedSessionId || 'unknown', 'session closed during creation', 'canonical-close');
+    if (!rt.session)
+      throw new SessionClosedError(
+        rt.addressedSessionId || 'unknown',
+        'session closed during creation',
+        'canonical-close'
+      );
     prewarmWsTransport(rt, providerImpl);
     throwIfAborted(signal);
     bootProfile('session:create:ready', {

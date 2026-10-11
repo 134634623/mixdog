@@ -397,7 +397,11 @@ test('defaults separation backs up, drops default-equal and dead keys, keeps use
     await writeFile(join(dir, 'mixdog-config.json'), JSON.stringify(original));
     const { state, store } = memoryStore(original);
     assert.equal(await store.separateDefaults(dir, new Date('2026-10-12T00:00:00Z')), true);
-    assert.deepEqual(state.value.desktop, { runInBackground: false, browserInstalled: true, defaultsSeparationVersion: 1 });
+    assert.deepEqual(state.value.desktop, {
+      runInBackground: false,
+      browserInstalled: true,
+      defaultsSeparationVersion: 1,
+    });
     assert.deepEqual(state.value.agent, original.agent);
     const [backup] = await readdir(join(dir, 'backups'));
     assert.match(backup, /^defaults-separation-2026-10-12/);
@@ -416,7 +420,10 @@ test('defaults separation removes the current default pin list and keeps a custo
   try {
     const current = memoryStore({
       desktop: {
-        activityRailPins: { pins: ['sessions', 'agents', 'schedules', 'workflows', 'projects', 'extensions'], revision: 1 },
+        activityRailPins: {
+          pins: ['sessions', 'agents', 'schedules', 'workflows', 'projects', 'extensions'],
+          revision: 1,
+        },
       },
     });
     await current.store.separateDefaults(dir);
@@ -454,10 +461,9 @@ test('defaults separation backs up the locked pre-image without overwriting and 
     const names = (await readdir(join(dir, 'backups'))).sort();
     assert.equal(names.length, 2);
     assert.deepEqual(JSON.parse(await readFile(join(dir, 'backups', names[0], 'mixdog-config.json'), 'utf8')), first);
-    assert.deepEqual(
-      JSON.parse(await readFile(join(dir, 'backups', names[1], 'mixdog-config.json'), 'utf8')),
-      { desktop: { keepAwake: true, other: 2 } }
-    );
+    assert.deepEqual(JSON.parse(await readFile(join(dir, 'backups', names[1], 'mixdog-config.json'), 'utf8')), {
+      desktop: { keepAwake: true, other: 2 },
+    });
     const newer = memoryStore({ desktop: { keepAwake: false, defaultsSeparationVersion: 2 } });
     assert.equal(await newer.store.separateDefaults(dir, now), false);
     assert.deepEqual(newer.state.value.desktop, { keepAwake: false, defaultsSeparationVersion: 2 });

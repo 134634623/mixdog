@@ -14,7 +14,7 @@ try {
 // tablets) keep native Ctrl/pinch zoom; the Electron host and phones lock it.
 // The layout can flip between phone and tablet at runtime (rotation, split
 // view), so every rule is evaluated per event instead of once at load.
-const zoomLocked = (): boolean => !(isRemoteHostRenderer() && !isMobileRemoteSurface());
+const zoomLocked = (): boolean => !isRemoteHostRenderer() || isMobileRemoteSurface();
 
 window.addEventListener('keydown', (event) => {
   if (!zoomLocked()) return;

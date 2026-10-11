@@ -129,10 +129,20 @@ const reply = (status, body) => async () =>
 
 test('redeeming a code maps every relay answer to a message that says what to do', async () => {
   const device = '0123456789abcdef0123456789abcdef';
-  const ok = await redeemPairCode('https://r', '482917', reply(200, { deviceId: device, name: 'Home PC', ticket: 'a'.repeat(32) }));
+  const ok = await redeemPairCode(
+    'https://r',
+    '482917',
+    reply(200, { deviceId: device, name: 'Home PC', ticket: 'a'.repeat(32) })
+  );
   assert.deepEqual(ok, { deviceId: device, name: 'Home PC', ticket: 'a'.repeat(32) });
-  await assert.rejects(redeemPairCode('https://r', '000000', reply(404, { status: 'invalid-code' })), /wrong or has expired/);
-  await assert.rejects(redeemPairCode('https://r', '000000', reply(429, { status: 'rate-limited', retryAfter: 42 })), /42 seconds/);
+  await assert.rejects(
+    redeemPairCode('https://r', '000000', reply(404, { status: 'invalid-code' })),
+    /wrong or has expired/
+  );
+  await assert.rejects(
+    redeemPairCode('https://r', '000000', reply(429, { status: 'rate-limited', retryAfter: 42 })),
+    /42 seconds/
+  );
   // A relay that predates codes answers 404 without the JSON status.
   await assert.rejects(redeemPairCode('https://r', '000000', reply(404, 'Not found')), /Update Mixdog on the main PC/);
 });

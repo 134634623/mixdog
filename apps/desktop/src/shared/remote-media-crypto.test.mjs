@@ -25,7 +25,10 @@ const segment = Buffer.alloc(MEDIA_SEGMENT_BYTES, 9);
 test('segments and meta round-trip, and every frame has its own nonce', async () => {
   const key = await newKey();
   const meta = { size: 1_000_000, mime: 'video/mp4', start: 65_536, end: 131_071 };
-  assert.deepEqual({ ...(await decryptMediaMeta(key, asset, 65_536, bodyOf(await encryptMediaMeta(key, asset, meta)))) }, meta);
+  assert.deepEqual(
+    { ...(await decryptMediaMeta(key, asset, 65_536, bodyOf(await encryptMediaMeta(key, asset, meta)))) },
+    meta
+  );
   const first = bodyOf(await encryptMediaSegment(key, asset, 0, 1_000_000, segment));
   const second = bodyOf(await encryptMediaSegment(key, asset, 0, 1_000_000, segment));
   assert.deepEqual(Buffer.from(await decryptMediaSegment(key, asset, 0, 1_000_000, first)), segment);
@@ -88,7 +91,10 @@ test('both ends of a handshake derive the same media key, only when the host adv
   };
   const { client, server } = await connect({ mediaE2ee: 1 });
   const frame = await encryptMediaSegment(server.mediaKey, asset, 0, 10, Buffer.from('0123456789'));
-  assert.equal(Buffer.from(await decryptMediaSegment(client.mediaKey, asset, 0, 10, bodyOf(frame))).toString(), '0123456789');
+  assert.equal(
+    Buffer.from(await decryptMediaSegment(client.mediaKey, asset, 0, 10, bodyOf(frame))).toString(),
+    '0123456789'
+  );
   // A different session cannot open it.
   const other = await connect({ mediaE2ee: 1 });
   await assert.rejects(decryptMediaSegment(other.client.mediaKey, asset, 0, 10, bodyOf(frame)));

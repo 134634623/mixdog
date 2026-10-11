@@ -119,7 +119,10 @@ test('a background sequence ends its worker holds before the capture, however it
   const aborted = yielded;
   assert.deepEqual(aborted.events, ['step:key:true', 'release:s']);
 
-  const foreground = holdRunner({ delivery: 'foreground', stepReply: (command) => ({ ok: true, action: command.action }) });
+  const foreground = holdRunner({
+    delivery: 'foreground',
+    stepReply: (command) => ({ ok: true, action: command.action }),
+  });
   await foreground.run();
   assert.equal(foreground.events.includes('release:s'), false, 'a foreground sequence holds nothing');
 });
@@ -187,7 +190,10 @@ test('a failed after-capture keeps a failed hold release as the reported failure
   });
   assert.deepEqual(unreleased.events.slice(-2), ['release:s', 'capture']);
 
-  const released = holdRunner({ stepReply: (command) => ({ ok: true, action: command.action }), capture: captureFails });
+  const released = holdRunner({
+    stepReply: (command) => ({ ok: true, action: command.action }),
+    capture: captureFails,
+  });
   await assert.rejects(released.run(), /^Error: observation_unavailable/);
 });
 

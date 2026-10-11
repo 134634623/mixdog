@@ -331,7 +331,11 @@ function crossDeviceHarness(restoreOverrides = {}) {
     ...restoreOverrides,
   };
   const h = createHarness({
-    state: { busy: true, items: [{ id: 'u1', kind: 'user', text: 'from the phone' }], promptHistoryList: ['from the phone'] },
+    state: {
+      busy: true,
+      items: [{ id: 'u1', kind: 'user', text: 'from the phone' }],
+      promptHistoryList: ['from the phone'],
+    },
     flags: { activePromptRestore: restoreState },
   });
   return { h, restoreState };

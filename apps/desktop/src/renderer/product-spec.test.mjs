@@ -55,7 +55,10 @@ test('a host with open access shows remote clients the Providers and Developer p
   assert.equal(settingsCategoryForSurface('developer', true, true), 'developer');
   // Moved extension pages stay folded into General either way.
   assert.equal(settingsCategoryForSurface('mcp', true, true), 'general');
-  assert.equal(settingsCategoriesForSurface(true, false).some((category) => category.value === 'providers'), false);
+  assert.equal(
+    settingsCategoriesForSurface(true, false).some((category) => category.value === 'providers'),
+    false
+  );
 });
 
 test('Connect to another PC is reachable from the command surface', () => {

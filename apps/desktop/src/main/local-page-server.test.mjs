@@ -14,7 +14,11 @@ function get(url, path, headers = {}, hostname = '127.0.0.1') {
       const chunks = [];
       response.on('data', (chunk) => chunks.push(chunk));
       response.on('end', () =>
-        resolve({ status: response.statusCode, type: response.headers['content-type'], body: Buffer.concat(chunks).toString() })
+        resolve({
+          status: response.statusCode,
+          type: response.headers['content-type'],
+          body: Buffer.concat(chunks).toString(),
+        })
       );
     });
     req.on('error', reject);
@@ -64,7 +68,13 @@ test('a Host other than the root origin is refused', async (t) => {
   const root = await site(t);
   const url = await localPageUrl(root, 'page.html');
   const { host, port } = new URL(url);
-  for (const bad of ['evil.example', `127.0.0.1:${port}`, `${host}.evil.example`, `localhost:${port}`, host.replace(':', 'x:')]) {
+  for (const bad of [
+    'evil.example',
+    `127.0.0.1:${port}`,
+    `${host}.evil.example`,
+    `localhost:${port}`,
+    host.replace(':', 'x:'),
+  ]) {
     assert.equal((await get(url, '/page.html', { host: bad })).status, 403, bad);
   }
 });
@@ -82,7 +92,9 @@ test('the origin is reachable over both IPv4 and IPv6 loopback', async (t) => {
   const root = await site(t);
   const url = await localPageUrl(root, 'page.html');
   assert.equal((await get(url, '/page.html')).status, 200);
-  const v6 = await get(url, '/page.html', {}, '::1').catch((error) => (error.code === 'EADDRNOTAVAIL' ? null : Promise.reject(error)));
+  const v6 = await get(url, '/page.html', {}, '::1').catch((error) =>
+    error.code === 'EADDRNOTAVAIL' ? null : Promise.reject(error)
+  );
   if (v6) assert.equal(v6.status, 200);
 });
 
@@ -93,7 +105,10 @@ test('nothing outside the root, no dotfiles and no non-web files are served', as
     assert.equal((await get(url, path)).status, 404, path);
   }
   // An unknown root token is not found.
-  assert.equal((await get(url, '/page.html', { host: new URL(url).host.replace(/^./, (c) => (c === '0' ? '1' : '0')) })).status, 404);
+  assert.equal(
+    (await get(url, '/page.html', { host: new URL(url).host.replace(/^./, (c) => (c === '0' ? '1' : '0')) })).status,
+    404
+  );
   // A DNS-rebound name pointing at loopback never reaches the files.
   assert.equal((await get(url, '/page.html', { host: 'evil.example' })).status, 403);
   await assert.rejects(localPageUrl(join(root, 'assets'), '../page.html'), /inside its folder/);

@@ -12,19 +12,7 @@ import {
 import type { BrowserHost } from './browser/host';
 import { requiredSessionId } from './desktop-state';
 
-export type BrowserRemoteMethod =
-  | 'stream'
-  | 'control'
-  | 'release'
-  | 'tabsWatch'
-  | 'tabOpen'
-  | 'history'
-  | 'credentialSuggestions'
-  | 'credentialFill'
-  | 'importSources'
-  | 'importStart';
-
-export const BROWSER_REMOTE_METHODS: ReadonlySet<string> = new Set<BrowserRemoteMethod>([
+const BROWSER_REMOTE_METHOD_NAMES = [
   'stream',
   'control',
   'release',
@@ -35,7 +23,11 @@ export const BROWSER_REMOTE_METHODS: ReadonlySet<string> = new Set<BrowserRemote
   'credentialFill',
   'importSources',
   'importStart',
-]);
+] as const;
+
+export type BrowserRemoteMethod = (typeof BROWSER_REMOTE_METHOD_NAMES)[number];
+
+export const BROWSER_REMOTE_METHODS: ReadonlySet<string> = new Set<BrowserRemoteMethod>(BROWSER_REMOTE_METHOD_NAMES);
 
 /** An import may wait on the host's administrator prompt. */
 const IMPORT_TIMEOUT_MS = 10 * 60_000;

@@ -533,7 +533,10 @@ export class SessionHostLifecycle {
           },
         ]);
       }
-      const inherited = await this.owner.invokeSession(sessionId, 'inheritFrom', [source, { compact: options?.compact === true }]);
+      const inherited = await this.owner.invokeSession(sessionId, 'inheritFrom', [
+        source,
+        { compact: options?.compact === true },
+      ]);
       await this.owner.sessionMetadata.load();
       this.owner.pendingCatalogSessionIds.delete(sessionId);
       void this.owner.publishCatalogs();

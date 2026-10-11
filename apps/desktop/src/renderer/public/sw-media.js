@@ -246,7 +246,11 @@ const mixdogMediaLane = (() => {
         probe.cancel();
         start = Math.max(0, probe.meta.size - range.end);
       }
-      const first = await openWindow(lane, start, range && range.start !== null && range.end !== null ? range.end : Infinity);
+      const first = await openWindow(
+        lane,
+        start,
+        range && range.start !== null && range.end !== null ? range.end : Infinity
+      );
       if (!first.meta) return new Response(null, { status: first.status });
       const { size, mime } = first.meta;
       const end = range && range.start !== null && range.end !== null ? Math.min(range.end, size - 1) : size - 1;

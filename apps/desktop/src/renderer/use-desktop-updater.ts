@@ -16,33 +16,32 @@ export function useDesktopUpdater(invoke: Invoke) {
     const host = window.mixdogDesktop;
     let live = true;
     const getState = host?.getUpdaterState;
-    const read = () => {
-      void getState!()
-        .then((next) => {
-          if (live) setState(next);
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (live) setReady(true);
-        });
-    };
-    if (typeof getState !== 'function') {
-      setReady(true);
-    } else {
-      read();
-    }
+    const read =
+      typeof getState === 'function'
+        ? () => {
+            void getState()
+              .then((next) => {
+                if (live) setState(next);
+              })
+              .catch(() => {})
+              .finally(() => {
+                if (live) setReady(true);
+              });
+          }
+        : null;
+    if (read) read();
+    else setReady(true);
     const unsubscribe = host?.subscribeUpdaterState?.((next) => {
       if (live) setState(next);
     });
     // Remote clients: a read made while the connection was down fails and
     // would leave the update state stale until a reload. Same value as
     // REMOTE_CONNECTION_READY_EVENT (remote-shim-state).
-    const reconnected = typeof getState === 'function' ? read : null;
-    if (reconnected) window.addEventListener('mixdog:remote-connection-ready', reconnected);
+    if (read) window.addEventListener('mixdog:remote-connection-ready', read);
     return () => {
       live = false;
       unsubscribe?.();
-      if (reconnected) window.removeEventListener('mixdog:remote-connection-ready', reconnected);
+      if (read) window.removeEventListener('mixdog:remote-connection-ready', read);
     };
   }, []);
 

@@ -65,9 +65,7 @@ final class MixdogPushStore {
   }
 
   private static void save(Context context, List<Map<String, String>> queue) {
-    JSONArray array = new JSONArray();
-    for (Map<String, String> entry : queue) array.put(new JSONObject(entry));
-    prefs(context).edit().putString(PENDING, array.toString()).apply();
+    prefs(context).edit().putString(PENDING, json(queue).toString()).apply();
   }
 
   private static JSONArray json(List<Map<String, String>> entries) {

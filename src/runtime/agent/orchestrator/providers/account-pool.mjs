@@ -123,11 +123,12 @@ async function accountQuotaExhausted(providerName, row, model, error, account) {
     await fetchOAuthUsageSnapshot({ provider: providerName, accountId: row.id }, account(row.id), () => {}, {
       force: true,
     });
+    const pool = readProviderAccountPool(providerName);
     exhausted = providerAccountExhausted(
-      readProviderAccountPool(providerName).accounts.find((entry) => entry.id === row.id),
+      pool.accounts.find((entry) => entry.id === row.id),
       Date.now(),
       model,
-      { useCredits: readProviderAccountPool(providerName).useCredits === true }
+      { useCredits: pool.useCredits === true }
     );
   }
   return { exhausted, delay };

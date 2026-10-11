@@ -156,11 +156,11 @@ blocker appears: block only after the same condition has repeated for three
 consecutive Goal turns, counting the user-triggered turn and automatic
 continuations; after a resume, count only turns since that resume. Until then,
 continue any available work and re-check the blocker against current state with
-a tool each turn rather than restating it. When current state
-verifies an impasse that only the user can clear (their action, approval,
-credentials, or a resource they control), block on that turn. Once the
-threshold is met, block instead of reporting the same blocker again. Treat equivalent blockers as the same condition even when their
-wording or stated next step changes. Never block for difficulty, slowness,
+a tool each turn rather than restating it. When current state verifies an
+impasse that only the user can clear (their action, approval, credentials, or a
+resource they control), block on that turn. Once the threshold is met, block
+instead of reporting the same blocker again. Treat equivalent blockers as the
+same condition even when their wording or stated next step changes. Never block for difficulty, slowness,
 uncertainty, a choice you can make, confirmation for in-scope work, or
 clarification that would only help. Use `abandon` only when the user redirects away from
 the objective; it preserves a stopped record rather than declaring success.

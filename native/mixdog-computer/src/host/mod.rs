@@ -258,7 +258,9 @@ impl Host {
             "release_session" => self.release_session(),
             "release_held_input" => self.release_held_input(),
             // This host keeps no no-activate hold across sequence steps.
-            "release_sequence_holds" => Ok(obj! { "text" => "sequence holds released", "released" => 0 }),
+            "release_sequence_holds" => {
+                Ok(obj! { "text" => "sequence holds released", "released" => 0 })
+            }
             "release_cursor_theme" => {
                 Ok(obj! { "text" => "cursor theme released", "system_theme_restored" => false })
             }

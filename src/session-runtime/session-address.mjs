@@ -54,8 +54,10 @@ export function assertNotAddressed(rt, operation) {
   }
 }
 
+export const isAdmissionOpen = (rt) => !rt.admission || rt.admission === 'open';
+
 export function assertAdmissionOpen(rt) {
-  if (rt.admission === 'open' || !rt.admission) return;
+  if (isAdmissionOpen(rt)) return;
   throw new SessionClosedError(rt.addressedSessionId || 'unknown', 'session is closed to new work', 'canonical-close');
 }
 
@@ -69,8 +71,6 @@ export function assertResumeTarget(rt, id) {
     );
   }
 }
-
-export const isAdmissionOpen =(rt) => !rt.admission || rt.admission === 'open';
 
 /** Fence admission before the manager close can cancel owned shells. */
 export function beginCanonicalClose(rt, sessionId) {

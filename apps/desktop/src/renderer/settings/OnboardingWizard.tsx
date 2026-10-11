@@ -828,7 +828,7 @@ function GitStep({ api }: { api: DesktopApi }) {
       ) : (
         !(authenticated && gitError) && (
           <p className="onboarding-card-text">
-          {authenticated ? t('Commits and pull requests are ready to go.') : connectHint}
+            {authenticated ? t('Commits and pull requests are ready to go.') : connectHint}
           </p>
         )
       )}
@@ -877,7 +877,11 @@ function GitStep({ api }: { api: DesktopApi }) {
             </button>
           )}
           {flowLive && deviceCode.active && (
-            <button type="button" disabled={busyAny} onClick={deviceCode.opened ? deviceCode.reopen : deviceCode.openGithub}>
+            <button
+              type="button"
+              disabled={busyAny}
+              onClick={deviceCode.opened ? deviceCode.reopen : deviceCode.openGithub}
+            >
               {deviceCode.opened ? t('Open GitHub again ↗') : t('Copy & open GitHub ↗')}
             </button>
           )}

@@ -243,7 +243,7 @@ export function StarterGuide({
       tour: [
         {
           target: ['.settings-connection-card', '.mixdog-settings__body'],
-          title: t('Scan to install the web app'),
+          title: t('Phones and tablets: scan the QR code'),
           body: t('Scan with your phone, then approve it here.'),
         },
       ],

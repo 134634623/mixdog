@@ -99,7 +99,8 @@ export function createRelayMediaLane(deps: RelayMediaLaneDeps): RelayMediaLane {
     }
     let target: { path: string; mime: string } | null;
     try {
-      target = leasedMediaFile(media.assetId) ?? (await resolveMediaFileTarget(deps.host, media.assetId, media.variant));
+      target =
+        leasedMediaFile(media.assetId) ?? (await resolveMediaFileTarget(deps.host, media.assetId, media.variant));
     } catch {
       fail(500);
       return;
@@ -121,8 +122,7 @@ export function createRelayMediaLane(deps: RelayMediaLaneDeps): RelayMediaLane {
       const { size } = await handle.stat();
       const range = parseRange(media.range, size) as { start: number; end: number } | { unsatisfiable: true } | null;
       if (range && 'unsatisfiable' in range) {
-        deps.sendEnvelope({ type: 'media-head', id, status: 416, headers: {} });
-        deps.sendEnvelope({ type: 'media-end', id });
+        fail(416);
         return;
       }
       const requested = range ?? { start: 0, end: size - 1 };
@@ -139,10 +139,7 @@ export function createRelayMediaLane(deps: RelayMediaLaneDeps): RelayMediaLane {
       });
       sendChunk(id, await encryptMediaMeta(key, asset, { size, mime: target.mime, start, end }));
       for (let offset = start; offset <= end; offset += MEDIA_SEGMENT_BYTES) {
-        while (
-          !pump.aborted &&
-          (pump.relayPaused || deps.socketBacklog() > MEDIA_SOCKET_BACKLOG_BYTES)
-        ) {
+        while (!pump.aborted && (pump.relayPaused || deps.socketBacklog() > MEDIA_SOCKET_BACKLOG_BYTES)) {
           await sleep(MEDIA_POLL_MS);
         }
         if (pump.aborted) return;

@@ -27,7 +27,10 @@ test('simple turn pairs request and reply with original indices', () => {
 
 test('role blocks: content arrays, tool messages, empty assistants', () => {
   const r = previousHumanContext([
-    user([{ type: 'text', text: 'part a' }, { type: 'text', text: 'part b' }]),
+    user([
+      { type: 'text', text: 'part a' },
+      { type: 'text', text: 'part b' },
+    ]),
     asst('', { toolCalls: [{ id: 'c1' }] }),
     { role: 'tool', toolCallId: 'c1', content: 'out' },
     asst([{ type: 'text', text: 'final' }]),
@@ -142,7 +145,10 @@ test('a compaction boundary does not recover an older human request', () => {
   assert.equal(result.prevHuman, null);
   assert.equal(result.replyIsPaired, false);
   assert.deepEqual(result.canonicalReply, { text: 'summary follow-up', index: 3 });
-  assert.equal(previousHumanContext([...history, user('new request'), asst('new reply')]).prevHuman.text, 'new request');
+  assert.equal(
+    previousHumanContext([...history, user('new request'), asst('new reply')]).prevHuman.text,
+    'new request'
+  );
 });
 
 test('does not mutate input and policy is frozen', () => {

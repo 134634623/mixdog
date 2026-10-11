@@ -74,6 +74,9 @@ function loadVerdict(codec: RichMarkdownCodec, text: string, body: string): Load
     verdict = support.ok ? checkRichMarkdownRoundTrip(codec, body) : support;
     if (verdict.ok) verdict = { ...verdict, spans: markdownBlockSpans(toLf(body)) };
   }
+  // Only acceptances are kept: a rejection (possibly from a transient
+  // failure) is checked again the next time this text is loaded.
+  if (!verdict.ok) return verdict;
   verdicts.set(text, verdict);
   if (verdicts.size > VERDICTS_KEPT) verdicts.delete(verdicts.keys().next().value!);
   return verdict;
@@ -149,6 +152,8 @@ export class RichMarkdownModelSync {
   /** Why the editor holds an edit the model could not take (it exists only
    *  in the editor), or null. */
   private held: string | null = null;
+  /** The held edit's document, while one is held. */
+  private heldDoc: ProseMirrorNode | null = null;
   /** When the open undo step last took an edit; null when none is open. */
   private stepAt: number | null = null;
   private subscription: IDisposable | null = null;
@@ -180,7 +185,9 @@ export class RichMarkdownModelSync {
     const text = this.model.getValue();
     if (text === this.rejected) return;
     const { frontMatter, body } = splitFrontMatter(text);
-    if (body === this.body) {
+    // Back to the body the editor shows after other text was rejected: the
+    // editor shows the unsupported state, so it is loaded again below.
+    if (body === this.body && this.rejected === null) {
       if (frontMatter !== this.frontMatter) {
         this.frontMatter = frontMatter;
         this.handlers.onFrontMatter(frontMatter);
@@ -191,7 +198,9 @@ export class RichMarkdownModelSync {
     // The editor holds an edit the model never took: it is kept (never
     // replaced behind the user's back) until explicitly discarded.
     if (this.held !== null) {
-      this.hold(t('The file changed elsewhere while this edit could not be saved. Discard the edit to load the current file.'));
+      this.hold(
+        t('The file changed elsewhere while this edit could not be saved. Discard the edit to load the current file.')
+      );
       return;
     }
     if (!this.reloadChangedBlocks(text)) this.load(text);
@@ -276,9 +285,34 @@ export class RichMarkdownModelSync {
   }
 
   private release(): void {
+    this.heldDoc = null;
     if (this.held === null) return;
     this.held = null;
     this.handlers.onHeld?.(null);
+  }
+
+  /**
+   * The whole file as it would read with the held edit, best effort (it is
+   * held because this Markdown does not read back exactly as the edit), for
+   * crash-recovery backups; null when nothing is held. The front matter and
+   * the parts of the body the edit left unchanged keep their bytes.
+   */
+  heldMarkdown(): string | null {
+    const doc = this.heldDoc;
+    if (this.held === null || !doc) return null;
+    let fresh: string;
+    try {
+      fresh = this.serializeBlocks(childrenOf(doc));
+    } catch {
+      return null;
+    }
+    let lf: string;
+    try {
+      lf = toLf(reconcileMarkdown(this.lf, fresh));
+    } catch {
+      lf = fresh;
+    }
+    return this.frontMatter + (this.eol === '\r\n' ? lf.replace(/\n/g, '\r\n') : lf);
   }
 
   /** Drops a held edit and reloads the editor from the model. */
@@ -391,7 +425,9 @@ export class RichMarkdownModelSync {
       ? [
           ...old.slice(0, p),
           ...mapped,
-          ...old.slice(n - s).map((entry) => ({ node: entry.node, start: entry.start + delta, end: entry.end + delta })),
+          ...old
+            .slice(n - s)
+            .map((entry) => ({ node: entry.node, start: entry.start + delta, end: entry.end + delta })),
         ]
       : null;
     // Suffix blocks are the document's own nodes from here on.
@@ -429,14 +465,24 @@ export class RichMarkdownModelSync {
     const { frontMatter, body } = splitFrontMatter(text);
     if (body !== this.body) {
       // Changed elsewhere without a reload: only possible while an edit is
-      // held, which must not overwrite that change.
-      if (this.held !== null) return false;
+      // held, which must not overwrite that change. The held edit still
+      // follows the editor, and is reported again so its backup does too.
+      if (this.held !== null) {
+        this.heldDoc = doc;
+        this.hold(this.held);
+        return false;
+      }
       this.setBody(body);
       this.blocks = null;
     }
     const result = this.spliceChangedBlocks(doc) ?? this.spliceWholeDocument(doc);
     if (!result) {
-      this.hold(t('This edit cannot be written as Markdown, so it is not in the file and cannot be saved yet. Keep editing, or discard it.'));
+      this.heldDoc = doc;
+      this.hold(
+        t(
+          'This edit cannot be written as Markdown, so it is not in the file and cannot be saved yet. Keep editing, or discard it.'
+        )
+      );
       return false;
     }
     this.release();

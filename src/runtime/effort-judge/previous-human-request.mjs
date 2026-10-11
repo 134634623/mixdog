@@ -144,12 +144,15 @@ export function previousHumanContext(messages, { retryPrompt } = {}) {
     pairedMissing = pairedReply ? null : 'no-assistant-text-in-turn';
   }
 
+  let prevHumanMissing = null;
+  if (!prevHuman) prevHumanMissing = boundary === 0 ? 'empty-history' : 'no-human-request';
+
   return {
     version: 1,
     boundary,
     retryTrimmedIndex,
     prevHuman,
-    prevHumanMissing: prevHuman ? null : boundary === 0 ? 'empty-history' : 'no-human-request',
+    prevHumanMissing,
     canonicalReply,
     pairedReply,
     pairedMissing,

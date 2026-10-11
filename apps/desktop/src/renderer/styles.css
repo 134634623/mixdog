@@ -703,7 +703,9 @@ button {
   padding: 6px;
   border-radius: var(--mx-radius-lg, 12px);
   background: var(--mx-bg-elevated, var(--mx-bg-base));
-  box-shadow: var(--mx-card-outline), 0 16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    var(--mx-card-outline),
+    0 16px 40px rgba(0, 0, 0, 0.45);
 }
 .remote-pc-item {
   display: flex;

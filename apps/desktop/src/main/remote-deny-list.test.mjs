@@ -52,7 +52,10 @@ test('secret-bearing capability errors are redacted for every client', () => {
   const params = [{ capability: 'saveProviderApiKey', args: ['openai', secret] }];
   assert.equal(redactRemoteError(`bad ${secret}`, 'invokeCapability', params), 'bad [redacted]');
   const oauth = [{ capability: 'completeOAuthProviderLogin', args: ['oauth_1', 'http://localhost/cb?code=abcdef123'] }];
-  assert.doesNotMatch(redactRemoteError('failed http://localhost/cb?code=abcdef123', 'invokeCapability', oauth), /abcdef123/);
+  assert.doesNotMatch(
+    redactRemoteError('failed http://localhost/cb?code=abcdef123', 'invokeCapability', oauth),
+    /abcdef123/
+  );
   assert.equal(
     redactRemoteError(`bad ${secret}`, 'invokeCapability', [{ capability: 'getSnapshot', args: [secret] }]),
     `bad ${secret}`

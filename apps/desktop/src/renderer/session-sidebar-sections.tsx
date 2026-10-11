@@ -568,15 +568,19 @@ export function projectsSection({
                       />
                     )}
                   </button>
-                  <button
-                    type="button"
-                    className="row-overflow-trigger project-folder-new"
-                    aria-label={t('New task')}
-                    data-tooltip={t('New task')}
-                    onClick={() => onNewTask(group.path)}
-                  >
-                    <Plus size={14} aria-hidden="true" />
-                  </button>
+                  {/* Like a collapsed section heading: the unread dot takes the
+                      trailing slot, so the + yields until the folder opens. */}
+                  {!unread && (
+                    <button
+                      type="button"
+                      className="row-overflow-trigger project-folder-new"
+                      aria-label={t('New task')}
+                      data-tooltip={t('New task')}
+                      onClick={() => onNewTask(group.path)}
+                    >
+                      <Plus size={14} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
                 {expanded && (
                   <div className="project-group-sessions">

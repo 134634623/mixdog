@@ -2,7 +2,9 @@
  *  shim installed by `remote-shim.ts` (`window.mixdogRemoteServer`). It is
  *  independent of the user agent, so a second PC's Electron app counts too. */
 export function isRemoteHostRenderer(): boolean {
-  return typeof window !== 'undefined' && Boolean((window as unknown as { mixdogRemoteServer?: string }).mixdogRemoteServer);
+  return (
+    typeof window !== 'undefined' && Boolean((window as unknown as { mixdogRemoteServer?: string }).mixdogRemoteServer)
+  );
 }
 
 /** Running inside Electron (title bar caption strip and other native chrome),

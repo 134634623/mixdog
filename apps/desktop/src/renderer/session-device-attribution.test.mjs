@@ -29,14 +29,17 @@ test('an approval answered elsewhere leaves a settled card only in a multi-devic
     null,
     'one device only'
   );
-  assert.equal(retiredApprovalFor({ id: 'a2' }, snapshot, new Set()), null, 'another approval\'s result');
+  assert.equal(retiredApprovalFor({ id: 'a2' }, snapshot, new Set()), null, "another approval's result");
 });
 
 test('a handed-back prompt lands only in the composer of the device that sent it, beside any draft', () => {
   const mine = nextComposerSubmissionId();
   const restore = { id: 'r1', ids: [mine], text: 'my prompt', device: 'Pixel', at: 1 };
   const applied = new Set();
-  assert.equal(applyPromptRestore({ ...restore, id: 'r0', ids: ['desktop-submit-someone-else'] }, 'draft', applied), null);
+  assert.equal(
+    applyPromptRestore({ ...restore, id: 'r0', ids: ['desktop-submit-someone-else'] }, 'draft', applied),
+    null
+  );
   assert.equal(applyPromptRestore(restore, 'half typed', applied), draftWithRestoredPrompt('half typed', 'my prompt'));
   assert.ok(applyPromptRestore(restore, 'half typed', new Set()), 'ownership, not the draft, decides');
   assert.equal(applyPromptRestore(restore, 'half typed', applied), null, 'applied once');

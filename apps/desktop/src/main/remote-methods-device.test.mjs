@@ -23,7 +23,7 @@ function recordingHost() {
 
 const client = (overrides = {}) => ({ deviceName: async () => 'Pixel 9', ...overrides });
 
-test('submit, abort and approval carry the connection\'s device name', async () => {
+test("submit, abort and approval carry the connection's device name", async () => {
   const { host, calls } = recordingHost();
   const methods = createRemoteMethods({ host }, client());
   await methods.submitToSession([SESSION, 'hello', { id: 'x1' }]);
@@ -47,7 +47,7 @@ test('a connection the relay does not name is a web app', async () => {
   assert.equal(calls[0][3].device, 'Web app');
 });
 
-test('a submit from a view that lacks another device\'s prompt is refused with a clear message', async () => {
+test("a submit from a view that lacks another device's prompt is refused with a clear message", async () => {
   const { host, calls } = recordingHost();
   const asked = [];
   const methods = createRemoteMethods(

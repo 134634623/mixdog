@@ -44,11 +44,7 @@ export async function readRemoteFile(
   let size = Infinity;
   let mime = 'application/octet-stream';
   while (offset < size) {
-    const range = await call<RangeResult>('previewProjectFileRange', [
-      ...target,
-      offset,
-      REMOTE_PREVIEW_CHUNK_BYTES,
-    ]);
+    const range = await call<RangeResult>('previewProjectFileRange', [...target, offset, REMOTE_PREVIEW_CHUNK_BYTES]);
     size = range.size;
     mime = range.mime;
     if (size > maxBytes) throw new Error('This file is too large to preview over remote access.');
@@ -210,7 +206,10 @@ export function createRemotePreviewApi(
         const oldest = blobs.keys().next().value as string;
         const dropped = blobs.get(oldest);
         blobs.delete(oldest);
-        void dropped?.then((value) => URL.revokeObjectURL(value), () => {});
+        void dropped?.then(
+          (value) => URL.revokeObjectURL(value),
+          () => {}
+        );
       }
       return { url: await url, kind: meta.kind, mime: meta.mime, mtimeMs: meta.mtimeMs, size: meta.size };
     },

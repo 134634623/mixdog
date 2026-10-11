@@ -34,7 +34,13 @@ test('spawned agent session receives contextPercent, selectedContextWindow and m
   // createSpawnedSession is internal; reach it through the exported preparer's
   // sessionSurface/local branches.
   const created = [];
-  const surface = { canonical: true, createChild: async (args) => (created.push(args), { session: {} }) };
+  const surface = {
+    canonical: true,
+    createChild: async (args) => {
+      created.push(args);
+      return { session: {} };
+    },
+  };
   await preparer(surface).createSpawnedSession(plan, spec, null);
   assert.deepEqual(created[0].spec, expected);
 
@@ -42,6 +48,10 @@ test('spawned agent session receives contextPercent, selectedContextWindow and m
   assert.deepEqual(local.session.spec, expected);
   assert.deepEqual(local.session.spec.preset.modelParameters, { context: '1m' });
 
-  const plain = await preparer(null).createSpawnedSession({ ...plan, preset: { provider: 'p', model: 'm' } }, { preset: {} }, null);
+  const plain = await preparer(null).createSpawnedSession(
+    { ...plan, preset: { provider: 'p', model: 'm' } },
+    { preset: {} },
+    null
+  );
   assert.equal(Object.hasOwn(plain.session.spec, 'contextPercent'), false);
 });

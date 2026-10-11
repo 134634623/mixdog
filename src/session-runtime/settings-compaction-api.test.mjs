@@ -7,10 +7,7 @@ import {
   resolveAutoClearIdleMs,
   parseDurationMs,
 } from '../runtime/agent/orchestrator/runtime-core/config-helpers.mjs';
-import {
-  _clearLiveSession,
-  setLiveSession,
-} from '../runtime/agent/orchestrator/session/store/live-state.mjs';
+import { _clearLiveSession, setLiveSession } from '../runtime/agent/orchestrator/session/store/live-state.mjs';
 
 function harness(session) {
   let config = { autoClear: { providerIdleMs: { 'anthropic-oauth': 300_000 } } };

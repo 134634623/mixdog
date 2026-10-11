@@ -22,6 +22,13 @@ interface SearchState extends RichMarkdownSearchQuery {
 
 export const richMarkdownSearchKey = new PluginKey<SearchState>('richMarkdownSearch');
 
+/** One character's case fold: lowercase of its uppercase, so case variants
+ *  with the same uppercase fold together (final `ς` and `σ`, `ſ` and `s`,
+ *  `ß` and `ss`). May be longer than the character. */
+function foldCase(char: string): string {
+  return char.toUpperCase().toLowerCase();
+}
+
 /** Every occurrence of `query` within a single run of text (matches never
  *  span block boundaries or non-text inline nodes such as math). */
 export function findRichMarkdownMatches(
@@ -32,7 +39,7 @@ export function findRichMarkdownMatches(
   if (!query) return [];
   // Folded per character exactly like the document below (lowercasing a
   // whole string is context-sensitive: a final `Σ` becomes `ς`, not `σ`).
-  const needle = caseSensitive ? query : Array.from(query, (char) => char.toLowerCase()).join('');
+  const needle = caseSensitive ? query : Array.from(query, foldCase).join('');
   const matches: RichMarkdownSearchMatch[] = [];
   let run = '';
   let runStart = -1;
@@ -49,7 +56,7 @@ export function findRichMarkdownMatches(
         to = [];
         let offset = 0;
         for (const char of run) {
-          const lower = char.toLowerCase();
+          const lower = foldCase(char);
           haystack += lower;
           for (let unit = 0; unit < lower.length; unit++) {
             from.push(offset);
@@ -58,7 +65,11 @@ export function findRichMarkdownMatches(
           offset += char.length;
         }
       }
-      for (let index = haystack.indexOf(needle); index !== -1; index = haystack.indexOf(needle, index + needle.length)) {
+      for (
+        let index = haystack.indexOf(needle);
+        index !== -1;
+        index = haystack.indexOf(needle, index + needle.length)
+      ) {
         const end = index + needle.length;
         matches.push({ from: runStart + (from ? from[index] : index), to: runStart + (to ? to[end - 1] : end) });
       }

@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 
 import { createFinalAnswerWatcher } from './final-answer-watcher';
-import { encryptNativePush, type NativePushContent } from '../shared/native-push-crypto';
+import { encryptNativePush, type NativePushContent, type NativePushReason } from '../shared/native-push-crypto';
 import type { NativePushSubscription } from './native-push-store';
 import { shouldShowTurnNotification, type TurnCompletion } from './push-turn-events';
 import type { PushSubscriptionStore } from './push-subscription-store';
@@ -14,7 +14,7 @@ import type { DesktopAgentPoolRow, DesktopSessionSummary } from '../shared/contr
 import type { DesktopSessionStateUpdate } from '../shared/contract-session';
 import type { SessionFinalAnswer } from './session-final-answer';
 
-type PushReason = 'turn-finished' | 'approval-pending' | 'input-needed';
+type PushReason = NativePushReason;
 
 /** What the desktop sends the relay per native subscription — never plaintext. */
 export interface NativePushMessage {
@@ -132,11 +132,7 @@ export function createPushNotifier(options: PushNotifierOptions): PushNotifier {
       subscriptions.map(async (subscription) => {
         const foreground = Boolean(subscription.clientId && options.isClientForeground(subscription.clientId));
         const target = { sessionId: completion.sessionId, browser: subscription.clientId.slice(0, 8) };
-        if (!showWhenForeground && !shouldShowTurnNotification(completion, foreground)) {
-          options.onDiagnostic?.('suppressed', { ...target, reason: 'foreground' });
-          return;
-        }
-        if (showWhenForeground && foreground) {
+        if (showWhenForeground ? foreground : !shouldShowTurnNotification(completion, foreground)) {
           options.onDiagnostic?.('suppressed', { ...target, reason: 'foreground' });
           return;
         }
@@ -227,7 +223,12 @@ export function createPushNotifier(options: PushNotifierOptions): PushNotifier {
     const sessionId = String(update?.sessionId || '');
     if (!sessionId || update.frameSource === 'replay') return;
     const snapshot = update.snapshot as (PendingInputSnapshot & { toolApproval?: { id?: unknown } | null }) | null;
-    notifyWait(sessionId, 'approval-pending', notifiedApproval, snapshot?.toolApproval ? String(snapshot.toolApproval.id ?? 'pending') : null);
+    notifyWait(
+      sessionId,
+      'approval-pending',
+      notifiedApproval,
+      snapshot?.toolApproval ? String(snapshot.toolApproval.id ?? 'pending') : null
+    );
     notifyWait(sessionId, 'input-needed', notifiedInput, pendingInputKey(snapshot));
   };
   // One push per distinct wait: the key is remembered until the wait clears.

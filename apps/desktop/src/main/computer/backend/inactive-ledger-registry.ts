@@ -82,9 +82,7 @@ export function createInactiveLedgerRegistry() {
     },
     /** Verifies each held worker's process and promotes those that are gone.
      *  Resolves true only when no ledger remains held. */
-    async promoteGone(
-      gone: (identity: ProcessIdentity) => Promise<boolean> = processIdentityGone
-    ): Promise<boolean> {
+    async promoteGone(gone: (identity: ProcessIdentity) => Promise<boolean> = processIdentityGone): Promise<boolean> {
       let none = true;
       for (const [path, held] of [...entries]) {
         if (held === null) continue;

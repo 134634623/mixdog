@@ -14,6 +14,12 @@ function normalizeCodeInput(text: string): string {
   return text.replace(/\D/gu, '').slice(0, 6);
 }
 
+/** Presence when the relay reported it; otherwise an open window implies online. */
+function savedHostStatus(host: DesktopRemoteHost): 'Online' | 'Offline' | undefined {
+  if (host.online === undefined) return host.open ? 'Online' : undefined;
+  return host.online ? 'Online' : 'Offline';
+}
+
 /** "Connect to another PC": the 6-digit code shown on the other computer's
  *  Settings → Connection, then the computers saved here. Each opens its own
  *  window; this app stays fully usable beside it. */
@@ -62,7 +68,7 @@ export function RemoteHostsPanel({ api }: { api: CapabilityApi }) {
     <>
       <Group
         title={t('Connect to another PC')}
-        description={t('Open Settings → Connection on the other computer and enter its 6-digit code.')}
+        description={t('Enter the code shown on the other PC under Settings → Connection → Other PC.')}
       >
         <div className="settings-connection-body">
           <form
@@ -94,10 +100,7 @@ export function RemoteHostsPanel({ api }: { api: CapabilityApi }) {
         </div>
       </Group>
       {hosts.length > 0 && (
-        <Group
-          title={t('Saved PCs')}
-          description={t('Computers you have connected to. Each opens in its own window.')}
-        >
+        <Group title={t('Saved PCs')} description={t('Computers you have connected to. Each opens in its own window.')}>
           <div className="settings-resource-list">
             {hosts.map((host) => (
               <ResourceRow
@@ -111,7 +114,7 @@ export function RemoteHostsPanel({ api }: { api: CapabilityApi }) {
                       })
                     : t('Not connected yet')
                 }
-                status={host.online === undefined ? (host.open ? 'Online' : undefined) : host.online ? 'Online' : 'Offline'}
+                status={savedHostStatus(host)}
                 actions={
                   <>
                     <ActionButton

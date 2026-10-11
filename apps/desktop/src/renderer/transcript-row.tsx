@@ -370,7 +370,11 @@ export const TranscriptRow = memo(
           {!user && !item.streaming && completion && (
             // biome-ignore lint/a11y/useSemanticElements: the footer names a group of response details; a <fieldset> would restyle it.
             <footer className="response-footer" role="group" aria-label={t('Response details')}>
-              <CompletionStatus item={completion} animateComplete={animateComplete} completionActivityKey={completionActivityKey} />
+              <CompletionStatus
+                item={completion}
+                animateComplete={animateComplete}
+                completionActivityKey={completionActivityKey}
+              />
               {metadata.shortTime && <time className="message-time">{metadata.shortTime}</time>}
               {text && <CopyControl value={text} label="Copy response" className="message-actions response-copy" />}
             </footer>

@@ -1221,6 +1221,11 @@ html[data-mixdog-mobile-tabs] .session-sidebar .sidebar-category-header > .row-o
   flex-basis: var(--mx-touch-row);
   margin-right: calc(var(--mx-rail-trailing-center, 20px) - 18px);
 }
+/* The folder + takes the same 36px row box; the desktop offset centers a 28px
+   box, which left this one 4px inboard of every other trailing control. */
+html[data-mixdog-mobile-tabs] .session-sidebar .project-folder > .project-folder-new {
+  right: calc(var(--mx-rail-trailing-center, 20px) - 18px);
+}
 /* Card actions start after a 12px inner gutter. A 36px overflow target ends
    2px before the card edge so its glyph center stays on the same 20px line. */
 html[data-mixdog-mobile-tabs] .session-sidebar-panels .schedules-row .row-overflow-trigger {

@@ -133,7 +133,10 @@ export function prepareReleases({
   }
   const plan = planRetention(index, devices, { now });
   for (const id of plan.drop) rmSync(join(releasesDir, id), { recursive: true, force: true });
-  index = parseReleaseIndex({ schemaVersion: 1, releases: index.releases.filter((entry) => plan.keep.includes(entry.id)) });
+  index = parseReleaseIndex({
+    schemaVersion: 1,
+    releases: index.releases.filter((entry) => plan.keep.includes(entry.id)),
+  });
   // Anything on disk the registry does not name (an interrupted earlier run)
   // is not servable and not verifiable: collect it with the rest.
   for (const entry of readdirSync(releasesDir, { withFileTypes: true })) {

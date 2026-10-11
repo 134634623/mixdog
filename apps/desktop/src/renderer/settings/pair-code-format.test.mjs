@@ -22,10 +22,23 @@ test('paired clients are classified by what they reported', () => {
 test('saved PCs keep the newest first, drop junk, and keep a known name', () => {
   const id = '0123456789abcdef0123456789abcdef';
   const other = 'f'.repeat(32);
-  assert.deepEqual(readSavedPcs(JSON.stringify([{ deviceId: 'nope', name: 'x' }, { deviceId: id, name: 'Home' }])), [
-    { deviceId: id, name: 'Home', lastConnectedAt: 0 },
-  ]);
-  const list = rememberPc([{ deviceId: id, name: 'Home', lastConnectedAt: 1 }], { deviceId: other, name: '', lastConnectedAt: 2 });
-  assert.deepEqual(list.map((pc) => pc.deviceId), [other, id]);
+  assert.deepEqual(
+    readSavedPcs(
+      JSON.stringify([
+        { deviceId: 'nope', name: 'x' },
+        { deviceId: id, name: 'Home' },
+      ])
+    ),
+    [{ deviceId: id, name: 'Home', lastConnectedAt: 0 }]
+  );
+  const list = rememberPc([{ deviceId: id, name: 'Home', lastConnectedAt: 1 }], {
+    deviceId: other,
+    name: '',
+    lastConnectedAt: 2,
+  });
+  assert.deepEqual(
+    list.map((pc) => pc.deviceId),
+    [other, id]
+  );
   assert.equal(rememberPc(list, { deviceId: id, name: '', lastConnectedAt: 3 })[0].name, 'Home');
 });

@@ -55,10 +55,13 @@ function Import-Functions($file, $names) {
 }
 `;
 
-test('no-activate holds count overlapping holders, clear only their own bit, and record it in the ledger', windowsOnly, async () => {
-  let ledger = '';
-  const result = await runFixture(
-    `
+test(
+  'no-activate holds count overlapping holders, clear only their own bit, and record it in the ledger',
+  windowsOnly,
+  async () => {
+    let ledger = '';
+    const result = await runFixture(
+      `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName Accessibility
 Add-Type -AssemblyName System.Drawing
@@ -66,10 +69,10 @@ Add-Type -ReferencedAssemblies @('System.dll','System.Core.dll','System.Drawing.
   [IO.File]::ReadAllText((Join-Path $env:FIXTURE_DIRECTORY 'native.cs')))
 [Console]::WriteLine([InactiveFixture]::Run())
 `,
-    {
-      'native.cs':
-        MIXDOG_HOST_CSHARP +
-        `
+      {
+        'native.cs':
+          MIXDOG_HOST_CSHARP +
+          `
 public static class InactiveFixture {
   [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
   static extern System.IntPtr CreateWindowExW(int ex, string cls, string name, uint style, int x, int y, int w, int h,
@@ -185,26 +188,30 @@ public static class InactiveFixture {
   }
 }
 `,
-    },
-    async (directory) => {
-      ledger = await readFile(join(directory, 'ledger.txt'), 'utf8');
-    }
-  );
-  assert.deepEqual(result, ['holds', 'recovery']);
-  // Each bit this worker added is recorded once and struck once it is cleared;
-  // the bit it found already set never appears.
-  assert.deepEqual(
-    ledger
-      .trim()
-      .split('\n')
-      .map((line) => line.split('\t')[0]),
-    ['+', '-', '+', '-']
-  );
-});
+      },
+      async (directory) => {
+        ledger = await readFile(join(directory, 'ledger.txt'), 'utf8');
+      }
+    );
+    assert.deepEqual(result, ['holds', 'recovery']);
+    // Each bit this worker added is recorded once and struck once it is cleared;
+    // the bit it found already set never appears.
+    assert.deepEqual(
+      ledger
+        .trim()
+        .split('\n')
+        .map((line) => line.split('\t')[0]),
+      ['+', '-', '+', '-']
+    );
+  }
+);
 
-test('a background semantic call releases its hold even when cleanup fails, and restores a repeated steal', windowsOnly, async () => {
-  const rows = await runFixture(
-    `
+test(
+  'a background semantic call releases its hold even when cleanup fails, and restores a repeated steal',
+  windowsOnly,
+  async () => {
+    const rows = await runFixture(
+      `
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
@@ -270,24 +277,25 @@ foreach ($scenario in @('enable_fails', 'focus_fails', 'resteal', 'delayed_unshi
 }
 [Console]::WriteLine((ConvertTo-Json @($rows) -Compress))
 `,
-    { 'input.ps1': PS_INPUT }
-  );
-  const byName = Object.fromEntries(rows.map((row) => [row.scenario, row]));
-  // The style comes off however the cleanup before it ended.
-  assert.equal(byName.enable_fails.releases, 1);
-  assert.match(byName.enable_fails.failure, /enable_failed/);
-  assert.equal(byName.focus_fails.releases, 1);
-  assert.match(byName.focus_fails.failure, /focus_broken/);
-  // A web content host is watched too, and a second steal is restored once more.
-  assert.equal(byName.resteal.releases, 1);
-  assert.equal(byName.resteal.failure, '');
-  assert.equal(byName.resteal.focus, 2);
-  assert.equal(byName.resteal.restored, true);
-  // An unshielded target is watched too, so a late steal is still undone.
-  assert.equal(byName.delayed_unshielded.focus, 1);
-  assert.equal(byName.delayed_unshielded.restored, true);
-  assert.equal(byName.delayed_unshielded.releases, 1);
-});
+      { 'input.ps1': PS_INPUT }
+    );
+    const byName = Object.fromEntries(rows.map((row) => [row.scenario, row]));
+    // The style comes off however the cleanup before it ended.
+    assert.equal(byName.enable_fails.releases, 1);
+    assert.match(byName.enable_fails.failure, /enable_failed/);
+    assert.equal(byName.focus_fails.releases, 1);
+    assert.match(byName.focus_fails.failure, /focus_broken/);
+    // A web content host is watched too, and a second steal is restored once more.
+    assert.equal(byName.resteal.releases, 1);
+    assert.equal(byName.resteal.failure, '');
+    assert.equal(byName.resteal.focus, 2);
+    assert.equal(byName.resteal.restored, true);
+    // An unshielded target is watched too, so a late steal is still undone.
+    assert.equal(byName.delayed_unshielded.focus, 1);
+    assert.equal(byName.delayed_unshielded.restored, true);
+    assert.equal(byName.delayed_unshielded.releases, 1);
+  }
+);
 
 const DELIVERY_STUBS = `
 Add-Type @'

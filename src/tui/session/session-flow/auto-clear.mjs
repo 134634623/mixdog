@@ -116,7 +116,10 @@ export function createAutoClearOps(bag, { reset, kickDrain }) {
     } catch (raceError) {
       flags.autoClearInFlight = true;
       compactPromise
-        .then((lateResult) => onLateCompact(lateResult, sessionId), () => {})
+        .then(
+          (lateResult) => onLateCompact(lateResult, sessionId),
+          () => {}
+        )
         .finally(() => {
           if (!flags.pendingClearedSessionUi) flags.autoClearInFlight = false;
         });

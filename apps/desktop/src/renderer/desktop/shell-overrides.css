@@ -248,24 +248,27 @@ html[data-mixdog-mobile-tabs] .model-trigger {
 html[data-mixdog-mobile-tabs] {
   --mx-touch-min: 40px;
 }
-html[data-mixdog-mobile-tabs] :is(
-  .sidebar-heading-toggle,
-  .starter-guide-toggle,
-  .starter-guide-pill,
-  .schedules-row.utilities-row,
-  .context-action,
-  .changes-file-main,
-  .turn-review-summary,
-  .turn-review-file,
-  .settings-action,
-  .settings-form-controls button,
-  .settings-provider-secret button,
-  .mx-select-trigger,
-  .slash-palette > button,
-  .workspace-tab-context-menu button,
-  .dock-header-menu button
-),
-html[data-mixdog-mobile-tabs] .mixdog-settings :is(input:not([type="checkbox"], [type="radio"], [type="range"]), select),
+html[data-mixdog-mobile-tabs]
+  :is(
+    .sidebar-heading-toggle,
+    .starter-guide-toggle,
+    .starter-guide-pill,
+    .schedules-row.utilities-row,
+    .context-action,
+    .changes-file-main,
+    .turn-review-summary,
+    .turn-review-file,
+    .settings-action,
+    .settings-form-controls button,
+    .settings-provider-secret button,
+    .mx-select-trigger,
+    .slash-palette > button,
+    .workspace-tab-context-menu button,
+    .dock-header-menu button
+  ),
+html[data-mixdog-mobile-tabs]
+  .mixdog-settings
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"]), select),
 html[data-mixdog-mobile-tabs] .workbench-side-panel-tabs button,
 html[data-mixdog-mobile-tabs] .extensions-tabs button,
 html[data-mixdog-mobile-tabs] .session-sidebar-panels .schedules-pane .schedules-row.utilities-row,
@@ -276,7 +279,7 @@ html[data-mixdog-mobile-tabs] .dock-scm-branch-button,
 html[data-mixdog-mobile-tabs] .dock-scm-remote-button,
 html[data-mixdog-mobile-tabs] .extensions-action,
 html[data-mixdog-mobile-tabs] .dock-scm-commit-summary,
-html[data-mixdog-mobile-tabs] .schedules-dialog input:not([type='checkbox']):not([type='radio']),
+html[data-mixdog-mobile-tabs] .schedules-dialog input:not([type="checkbox"]):not([type="radio"]),
 html[data-mixdog-mobile-tabs] .settings-oauth-dialog button,
 html[data-mixdog-mobile-tabs] .stats-range,
 html[data-mixdog-mobile-tabs] .settings-feedback-attach,
@@ -285,17 +288,18 @@ html[data-mixdog-mobile-tabs] .settings-changelog-list button[aria-expanded],
 html[data-mixdog-mobile-tabs] .mixdog-settings__rail-group button {
   min-height: var(--mx-touch-min);
 }
-html[data-mixdog-mobile-tabs] :is(
-  .session-panel-action,
-  .browser-pane-nav-button,
-  .provider-account-add-button,
-  .provider-account-grip,
-  .dock-scm-context-pin,
-  .changes-file-open,
-  .turn-review-open,
-  .turn-review-revert,
-  .starter-guide-close
-) {
+html[data-mixdog-mobile-tabs]
+  :is(
+    .session-panel-action,
+    .browser-pane-nav-button,
+    .provider-account-add-button,
+    .provider-account-grip,
+    .dock-scm-context-pin,
+    .changes-file-open,
+    .turn-review-open,
+    .turn-review-revert,
+    .starter-guide-close
+  ) {
   min-width: var(--mx-touch-min);
   min-height: var(--mx-touch-min);
 }
@@ -390,17 +394,21 @@ html[data-mixdog-mobile-tabs] .provider-account-row > .settings-resource-actions
   justify-content: flex-end;
 }
 
-/* Shortcuts: the keybind chip drops under its label instead of squeezing a
-   chord like Ctrl+Shift+Tab into 45% and breaking it mid-word. */
+/* Shortcuts: label left, keybind chip right, as on the PC. Only a chord that
+   does not fit beside its label (Ctrl+Shift+Tab) wraps, and it wraps whole to
+   the next line's right edge instead of breaking mid-word. */
 html[data-mixdog-mobile-tabs] .settings-shortcut-row {
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: 16px;
   row-gap: 4px;
   padding-block: 8px;
 }
 html[data-mixdog-mobile-tabs] .settings-shortcut-row kbd {
-  justify-self: start;
+  margin-left: auto;
   overflow-wrap: normal;
-  text-align: left;
+  text-align: right;
   white-space: normal;
 }
 
@@ -427,11 +435,10 @@ html[data-mixdog-mobile-tabs] .workbench-search-mode button {
   height: 100%;
   min-height: var(--mx-touch-min);
 }
-html[data-mixdog-mobile-tabs] .dock-scm-tab[aria-checked='true']::after,
-html[data-mixdog-mobile-tabs] .workbench-search-mode button[aria-selected='true']::after {
+html[data-mixdog-mobile-tabs] .dock-scm-tab[aria-checked="true"]::after,
+html[data-mixdog-mobile-tabs] .workbench-search-mode button[aria-selected="true"]::after {
   bottom: 0;
 }
-
 
 /* Assistant response footer: the desktop rule outranks the compact mobile tier (24px). */
 html[data-mixdog-mobile-tabs] .message.assistant .response-footer .message-actions {

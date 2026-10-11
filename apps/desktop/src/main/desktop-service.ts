@@ -2,11 +2,8 @@ import type {
   DesktopBrowserImportProgress,
   DesktopRemoteBrowserStreamFrame,
   DesktopRemoteBrowserTab,
-  DesktopSessionStateUpdate,
-  SessionSnapshot,
 } from '../shared/contract';
 import { BROWSER_OPEN_REQUESTED_DESKTOP_EVENT } from '../shared/remote-browser';
-import { reportTranscriptRead } from '../shared/transcript-read-diagnostics';
 import type {
   MixdogProjectsModule,
   MixdogSessionSearchModule,
@@ -21,15 +18,7 @@ import {
   type SerializableDesktopServiceOptions,
 } from './desktop-service-contract';
 import type { DesktopServiceInbound, DesktopServiceOutbound } from './desktop-service-protocol';
-import { createSnapshotStateMailbox } from './snapshot-state-mailbox';
-import {
-  createSessionReadWindow,
-  createSnapshotDeltaEncoder,
-  isNoDelta,
-  releaseHiddenSessionStateEntries,
-  shouldPublishSessionState,
-  type SnapshotDeltaEncoder,
-} from './state-delta';
+import { createDesktopServiceStateSync } from './desktop-service-state-sync';
 import { createDesktopOperations } from './desktop-operations';
 import { rotatePairingToken } from './remote-pairing-token';
 import { remoteAccessDescriptor } from './remote-access-descriptor';
@@ -45,8 +34,6 @@ import { activateRemote, isRemoteActivated } from './remote-activation';
 import { rotateRelayE2EEIdentity } from './remote-e2ee';
 import type { RemoteHostRequestMethod } from './remote-methods';
 import type { BrowserRemoteMethod } from './remote-browser-methods';
-import { synchronizeViewSnapshot } from './view-synchronizer';
-import { filterSessionIds, requiredVisibleSessionVersion } from './desktop-state';
 
 // Slightly under the relay's own claim TTL: a dialog left open must never
 // outlive the request it answers.
@@ -201,91 +188,6 @@ function createBrowserRemoteRequests(
   };
 }
 
-/** Per-session transcript deltas: one encoder per session, the last snapshot it
- *  encoded, and where that snapshot came from. Every session-state frame the
- *  service emits is built here, which is what lets a resync rebuild the same
- *  frame from a reset encoder instead of asking the host again. */
-function createSessionStatePublisher(emit: (message: DesktopServiceOutbound) => void) {
-  const encoders = new Map<string, SnapshotDeltaEncoder>();
-  const latestSnapshots = new Map<string, SessionSnapshot>();
-  const latestProvenance = new Map<
-    string,
-    {
-      frameSource: 'live' | 'replay';
-      contentRevision?: number;
-    }
-  >();
-  const post = (update: DesktopSessionStateUpdate): void => {
-    const { sessionId, snapshot } = update;
-    let encoder = encoders.get(sessionId);
-    // Main decodes with this same build, so older-history pages travel as prepends.
-    if (!encoder) encoder = createSnapshotDeltaEncoder({ prepend: true });
-    if (snapshot === null) {
-      emit({
-        kind: 'session-state',
-        sessionId,
-        wire: encoder.encode(null),
-        frameSource: update.frameSource,
-        ...(update.laneEnd ? { laneEnd: update.laneEnd } : {}),
-        ...(typeof update.contentRevision === 'number' ? { contentRevision: update.contentRevision } : {}),
-      });
-      encoders.delete(sessionId);
-      latestSnapshots.delete(sessionId);
-      latestProvenance.delete(sessionId);
-      return;
-    }
-    encoders.set(sessionId, encoder);
-    latestSnapshots.set(sessionId, snapshot);
-    latestProvenance.set(sessionId, update);
-    const wire = encoder.encode(snapshot);
-    reportTranscriptRead(sessionId, update.readTraceId, isNoDelta(wire) ? 'service-unchanged' : 'service-send');
-    if (isNoDelta(wire)) return;
-    emit({
-      kind: 'session-state',
-      sessionId,
-      wire,
-      ...(update.readTraceId ? { readTraceId: update.readTraceId } : {}),
-      frameSource: update.frameSource,
-      ...(typeof update.contentRevision === 'number' ? { contentRevision: update.contentRevision } : {}),
-    });
-  };
-  return {
-    post,
-    /** Drops one session's encoder, so its next frame is a full snapshot. */
-    forget(sessionId: string): void {
-      encoders.delete(sessionId);
-    },
-    /** A view sync restarts every lane from a full snapshot. */
-    resetEncoders(): void {
-      encoders.clear();
-    },
-    /** Re-sends what this session last published, from a reset encoder. */
-    republish(sessionId: string): void {
-      const encoder = encoders.get(sessionId);
-      const snapshot = latestSnapshots.get(sessionId);
-      const provenance = latestProvenance.get(sessionId);
-      if (!encoder || snapshot === undefined || !provenance) return;
-      encoder.reset();
-      post({
-        sessionId,
-        snapshot,
-        ...provenance,
-      });
-    },
-    /** A session the window stopped showing keeps no delta state here. */
-    releaseHidden(visibleSessionIds: Set<string>): void {
-      releaseHiddenSessionStateEntries(visibleSessionIds, [encoders, latestSnapshots, latestProvenance], (sessionId) =>
-        encoders.get(sessionId)?.reset()
-      );
-    },
-    clear(): void {
-      encoders.clear();
-      latestSnapshots.clear();
-      latestProvenance.clear();
-    },
-  };
-}
-
 /** Desktop service adapter hosted inside the singleton machine daemon.
  *
  * DesktopServiceClient remains a pure, tested projection/cache layer. The
@@ -358,12 +260,8 @@ export async function createDesktopService({
       emit({ kind: 'desktop-event', name: 'relay-payload-refused', value });
     },
     terminals: operations.terminals,
-    browserRemote: browserRemoteRequests.request as (
-      method: BrowserRemoteMethod,
-      args: unknown[],
-      timeoutMs?: number
-    ) => Promise<unknown>,
-    hostRequest: browserRemoteRequests.request as (method: RemoteHostRequestMethod, args: unknown[]) => Promise<unknown>,
+    browserRemote: browserRemoteRequests.request,
+    hostRequest: browserRemoteRequests.request,
     subscribeTerminalData: operations.subscribeTerminalData,
     userDataPath: options.userDataPath,
     onClientCountChanged,
@@ -450,69 +348,7 @@ export async function createDesktopService({
     return remoteDescriptor();
   };
   const rpcMethods = new Set<string>(DESKTOP_SERVICE_METHODS);
-  let viewsSyncing = false;
-  let viewVersion = 0;
-  let visibleSessionVersion = 0;
-  let serviceClosed = false;
-  let viewSyncQueue: Promise<void> = Promise.resolve();
-  const visibleSessionIds = new Set<string>();
-  const desktopReads = createSessionReadWindow();
-  const sessionStates = createSessionStatePublisher(emit);
-
-  const stateMailbox = createSnapshotStateMailbox<SessionSnapshot>((sequence, wire) => {
-    emit({ kind: 'state', sequence, wire });
-  });
-
-  const unsubscribeState = host.subscribe((snapshot) => {
-    if (!viewsSyncing) stateMailbox.publish(snapshot);
-  });
-  const unsubscribeSessions = host.subscribeSessions((sessions) => {
-    if (!viewsSyncing) emit({ kind: 'sessions', sessions });
-  });
-  const unsubscribeAgentPool = host.subscribeAgentPool((agents) => {
-    if (!viewsSyncing) emit({ kind: 'agent-pool', agents });
-  });
-  const unsubscribeSessionStates = host.subscribeSessionStates((update) => {
-    if (viewsSyncing) {
-      reportTranscriptRead(update.sessionId, update.readTraceId, 'service-syncing');
-      return;
-    }
-    if (!shouldPublishSessionState(update.sessionId, update.snapshot, visibleSessionIds, desktopReads)) {
-      reportTranscriptRead(update.sessionId, update.readTraceId, 'service-hidden');
-      return;
-    }
-    sessionStates.post(update);
-  });
-  stateMailbox.publish(host.getSnapshot());
-  const synchronizeViews = (): Promise<void> => {
-    const run = viewSyncQueue
-      .catch(() => undefined)
-      .then(async () => {
-        let version: number;
-        do {
-          if (serviceClosed) return;
-          version = viewVersion;
-          viewsSyncing = true;
-          try {
-            await host.setVisibleSessions([...visibleSessionIds]);
-            await synchronizeViewSnapshot(host, [...visibleSessionIds], (snapshot) => {
-              if (serviceClosed) return;
-              stateMailbox.reset(snapshot.snapshot);
-              sessionStates.resetEncoders();
-              for (const update of snapshot.sessionStates) sessionStates.post(update);
-              emit({ kind: 'sessions', sessions: snapshot.sessions });
-              emit({ kind: 'agent-pool', agents: snapshot.agents });
-              viewsSyncing = false;
-              if (version === viewVersion) emit({ kind: 'view-sync-complete' });
-            });
-          } finally {
-            viewsSyncing = false;
-          }
-        } while (version !== viewVersion);
-      });
-    viewSyncQueue = run;
-    return run;
-  };
+  const stateSync = createDesktopServiceStateSync({ host, emit });
   const invokeServiceOperation = async (operation: string, operationArgs: unknown[]): Promise<unknown> => {
     switch (operation) {
       case 'remoteAccessStart':
@@ -532,7 +368,8 @@ export async function createDesktopService({
       case 'remoteAccessPairCode': {
         // The code exists while Settings → Connection is open; opening it is
         // an explicit remote-access action like the pairing card itself.
-        const action = operationArgs[0] === 'release' ? 'release' : operationArgs[0] === 'renew' ? 'renew' : 'ensure';
+        const requested = operationArgs[0];
+        const action = requested === 'release' || requested === 'renew' ? requested : 'ensure';
         if (action !== 'release') await startRemoteServices(true);
         return remoteRelay?.pairCode(action) ?? null;
       }
@@ -573,23 +410,6 @@ export async function createDesktopService({
         return operations.invoke(operation, operationArgs);
     }
   };
-  const setDeliveryFilter = async (args: unknown[]): Promise<boolean> => {
-    const version = args[1];
-    if (version !== undefined) {
-      const nextVersion = requiredVisibleSessionVersion(version);
-      // HTTP requests can arrive out of order even when IPC sent them in
-      // order. An old tab must not restore its filter or subscription set.
-      if (nextVersion <= visibleSessionVersion) return true;
-      visibleSessionVersion = nextVersion;
-    }
-    viewVersion += 1;
-    const requested = filterSessionIds(args[0]);
-    visibleSessionIds.clear();
-    for (const sessionId of requested) visibleSessionIds.add(sessionId);
-    sessionStates.releaseHidden(visibleSessionIds);
-    return host.setVisibleSessions(args[0] as string[]);
-  };
-
   return {
     get clientCount() {
       return remoteRelay?.clientCount ?? 0;
@@ -602,7 +422,7 @@ export async function createDesktopService({
         return invokeServiceOperation(String(args[0] || ''), Array.isArray(args[1]) ? args[1] : []);
       }
       if (method === 'setVisibleSessions') {
-        return setDeliveryFilter(args);
+        return stateSync.setDeliveryFilter(args);
       }
       const target = (host as unknown as Record<DesktopServiceMethod, (...values: unknown[]) => unknown>)[
         method as DesktopServiceMethod
@@ -610,43 +430,16 @@ export async function createDesktopService({
       // The window's own read: its frame must reach the window even before a
       // pane registers the session as visible.
       if (method === 'prefetchSession') {
-        return desktopReads.run(String(args[0] || ''), async () => await target.apply(host, args));
+        return stateSync.runDesktopRead(String(args[0] || ''), async () => await target.apply(host, args));
       }
       return await target.apply(host, args);
     },
     async control(value): Promise<void> {
       if (!value || typeof value !== 'object') return;
-      const message = value as DesktopServiceInbound;
-      if (message.kind === 'state-ack' && Number.isSafeInteger(message.sequence)) {
-        stateMailbox.acknowledge(message.sequence);
-        return;
-      }
-      if (message.kind === 'state-resync') {
-        await synchronizeViews();
-        return;
-      }
-      if (message.kind !== 'session-state-resync') return;
-      const sessionId = String(message.sessionId || '');
-      if (host.replaySessionStates) {
-        await host.replaySessionStates([sessionId], (updates) => {
-          for (const update of updates) {
-            sessionStates.forget(update.sessionId);
-            sessionStates.post(update);
-          }
-        });
-        return;
-      }
-      sessionStates.republish(sessionId);
+      await stateSync.control(value as DesktopServiceInbound);
     },
     async dispose(): Promise<void> {
-      serviceClosed = true;
-      unsubscribeState();
-      unsubscribeSessions();
-      unsubscribeAgentPool();
-      unsubscribeSessionStates();
-      stateMailbox.clear();
-      sessionStates.clear();
-      visibleSessionIds.clear();
+      stateSync.dispose();
       desktopEventListeners.clear();
       browserRemoteRequests.rejectAll('Desktop service is closing.');
       if (relayRetryTimer) {

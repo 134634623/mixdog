@@ -49,8 +49,7 @@ export function sendNativePush(leg, message) {
   const { store, deviceId, socket, sendJson, nativeBindings, nativePush, nativeLimiter } = leg;
   if (!nativePush || !nativeBindings) return;
   const { platform, token, mx, reason, collapseKey } = message;
-  const reply = (fields) =>
-    sendJson(socket, { type: 'native-push-result', platform, token, collapseKey, ...fields });
+  const reply = (fields) => sendJson(socket, { type: 'native-push-result', platform, token, collapseKey, ...fields });
   if (
     !nativePushPlatforms(leg).includes(platform) ||
     !validNativeToken(platform, token) ||
@@ -79,7 +78,14 @@ export function sendNativePush(leg, message) {
     return;
   }
   void nativePush
-    .send({ platform, token, mx, reason, collapseKey, sandbox: typeof message.sandbox === 'boolean' ? message.sandbox : undefined })
+    .send({
+      platform,
+      token,
+      mx,
+      reason,
+      collapseKey,
+      sandbox: typeof message.sandbox === 'boolean' ? message.sandbox : undefined,
+    })
     .then((result) => {
       if (result.invalid) nativeBindings.delete(token);
       reply({

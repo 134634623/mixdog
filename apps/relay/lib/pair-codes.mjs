@@ -36,8 +36,13 @@ const TICKET_PATTERN = /^[0-9a-f]{32}$/;
 // The bundled phone-app pairing screen is the only cross-origin caller.
 const CORS_ORIGINS = new Set(['https://localhost', 'capacitor://localhost']);
 
-function cleanName(value) {
-  return typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_NAME_LENGTH) : '';
+export function cleanName(value) {
+  return typeof value === 'string'
+    ? value
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .trim()
+        .slice(0, MAX_NAME_LENGTH)
+    : '';
 }
 
 export class PairCodes {
@@ -290,7 +295,8 @@ async function handlePresence({ liveDesktops, store, presenceLimiter }, request,
   const ids = Array.isArray(body?.ids) ? body.ids.slice(0, MAX_PRESENCE_IDS) : [];
   const online = {};
   for (const id of ids) {
-    if (typeof id === 'string' && isRoutingId(id) && store.isKnown(id)) online[id] = desktopLegOpen(liveDesktops.get(id));
+    if (typeof id === 'string' && isRoutingId(id) && store.isKnown(id))
+      online[id] = desktopLegOpen(liveDesktops.get(id));
   }
   reply(request, response, 200, { online });
 }
@@ -300,7 +306,11 @@ export async function handlePairCodeRequest(context, request, response) {
   const pathname = requestUrl(request)?.pathname ?? '';
   if (request.method === 'OPTIONS') {
     response
-      .writeHead(204, { ...corsHeaders(request), 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Max-Age': '600' })
+      .writeHead(204, {
+        ...corsHeaders(request),
+        'Access-Control-Allow-Methods': 'GET, POST',
+        'Access-Control-Max-Age': '600',
+      })
       .end();
     return;
   }
@@ -309,7 +319,8 @@ export async function handlePairCodeRequest(context, request, response) {
     return;
   }
   if (request.method === 'POST' && pathname === '/pair-code/resolve') return handleResolve(context, request, response);
-  if (request.method === 'POST' && pathname === '/pair-code/presence') return handlePresence(context, request, response);
+  if (request.method === 'POST' && pathname === '/pair-code/presence')
+    return handlePresence(context, request, response);
   if (request.method === 'GET' && pathname === '/pair-code/support') return handleSupport(context, request, response);
   response.writeHead(404).end();
 }
@@ -317,5 +328,3 @@ export async function handlePairCodeRequest(context, request, response) {
 export function createPresenceLimiter() {
   return new RateLimiter(60, 60_000);
 }
-
-export { CODE_PATTERN as PAIR_CODE_PATTERN, TICKET_PATTERN };

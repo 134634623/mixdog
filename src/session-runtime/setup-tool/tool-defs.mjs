@@ -228,7 +228,11 @@ export const SETUP_TOOL_DEFS = Object.freeze([
             selectedId: { type: 'string', description: 'Account to use now.' },
             auto: { type: 'boolean', description: 'Automatic switching to another account when one is exhausted.' },
             useCredits: { type: 'boolean', description: 'Allow paid credits once plan limits are reached.' },
-            order: { type: 'array', items: { type: 'string' }, description: 'Every connected account id exactly once.' },
+            order: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Every connected account id exactly once.',
+            },
             rename: {
               type: 'object',
               additionalProperties: false,
@@ -266,8 +270,7 @@ export const SETUP_TOOL_DEFS = Object.freeze([
           type: 'integer',
           minimum: 16384,
           maximum: 32768,
-          description:
-            'inspect_hf_model: runtime context allocation; default 32768 when the GPU holds it, else 16384.',
+          description: 'inspect_hf_model: runtime context allocation; default 32768 when the GPU holds it, else 16384.',
         },
         previewId: { type: 'string', description: 'register_hf_model: unexpired read-only inspection receipt.' },
         licenseAccepted: {

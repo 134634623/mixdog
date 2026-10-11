@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { decodeRelayBinaryFrame, encodeRelayBinaryFrame } from './relay-binary-frame.mjs';
 import { failMediaPending, forwardMediaFrame } from './relay-media-proxy.mjs';
+import { cleanName } from './pair-codes.mjs';
 import {
   bindNativeToken,
   dropNativeBindings,
@@ -30,10 +31,17 @@ import {
   uplinkCeilings,
 } from './relay-transport.mjs';
 
+function closeQuietly(socket, code, reason) {
+  try {
+    socket.close(code, reason);
+  } catch {
+    /* already gone */
+  }
+}
+
 function revokeDevice(leg) {
   const { store, deviceId, socket, entry, sendJson } = leg;
   const removed = store.revoke(deviceId);
-  if (removed) dropNativeBindings(leg.nativeBindings, deviceId);
   if (!removed) {
     // Unknown device, or the removal could not be persisted. Report the
     // failure and keep the leg: closing it as revoked would tell the user
@@ -41,21 +49,10 @@ function revokeDevice(leg) {
     sendJson(socket, { type: 'device-revoked', ok: false });
     return;
   }
+  dropNativeBindings(leg.nativeBindings, deviceId);
   leg.revoked = true;
-  for (const phone of entry.clients.values()) {
-    try {
-      phone.close(4003, 'pairing revoked');
-    } catch {
-      /* already gone */
-    }
-  }
-  const finish = () => {
-    try {
-      socket.close(4003, 'device revoked');
-    } catch {
-      /* already gone */
-    }
-  };
+  for (const phone of entry.clients.values()) closeQuietly(phone, 4003, 'pairing revoked');
+  const finish = () => closeQuietly(socket, 4003, 'device revoked');
   try {
     socket.send(JSON.stringify({ type: 'device-revoked', ok: true }), finish);
   } catch {
@@ -106,18 +103,13 @@ function listClients({ store, deviceId, socket, entry, sendJson }, message) {
 function revokeClient({ store, deviceId, socket, entry, sendJson, nativeBindings }, message) {
   if (typeof message.requestId !== 'string' || typeof message.clientId !== 'string') return;
   const removed = store.revokeClient(deviceId, message.clientId);
-  if (removed) dropNativeBindings(nativeBindings, deviceId, message.clientId);
   // Only a credential that is actually gone closes its browser: a failed
   // persist leaves the pairing valid, and closing it as revoked would tell
   // the user something the store did not do.
   if (removed) {
+    dropNativeBindings(nativeBindings, deviceId, message.clientId);
     for (const phone of entry.clients.values()) {
-      if (phone.browserClientId !== message.clientId) continue;
-      try {
-        phone.close(4003, 'pairing revoked');
-      } catch {
-        /* already gone */
-      }
+      if (phone.browserClientId === message.clientId) closeQuietly(phone, 4003, 'pairing revoked');
     }
   }
   sendJson(socket, {
@@ -171,8 +163,7 @@ function requestPairCode({ pairCodes, deviceId, socket, sendJson }, message) {
 // The desktop's own name for itself, shown in the PC switcher of the remote
 // UI. A label only; it is never an identifier.
 function reportName({ entry }, message) {
-  entry.hostName =
-    typeof message.name === 'string' ? message.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 80) : '';
+  entry.hostName = cleanName(message.name);
 }
 
 function clearPairCode({ pairCodes, deviceId }) {
@@ -188,12 +179,7 @@ function forwardFrame({ entry }, message) {
 function closeClient({ entry }, message) {
   const phone = entry.clients.get(String(message.clientId || ''));
   if (!phone) return;
-  const reason = String(message.reason || 'desktop rejected client').slice(0, 120);
-  try {
-    phone.close(4004, reason);
-  } catch {
-    /* already gone */
-  }
+  closeQuietly(phone, 4004, String(message.reason || 'desktop rejected client').slice(0, 120));
 }
 
 function broadcastFrame({ entry }, message) {
@@ -251,13 +237,7 @@ function releaseDesktopLeg(liveDesktops, deviceId, entry, socket) {
   entry.offlineTimer = setTimeout(() => {
     entry.offlineTimer = null;
     if (liveDesktops.get(deviceId)?.socket !== socket) return;
-    for (const phone of entry.clients.values()) {
-      try {
-        phone.close(4002, 'desktop offline');
-      } catch {
-        /* already gone */
-      }
-    }
+    for (const phone of entry.clients.values()) closeQuietly(phone, 4002, 'desktop offline');
     liveDesktops.delete(deviceId);
   }, 45_000);
   entry.offlineTimer.unref?.();
@@ -464,12 +444,7 @@ function clientOpenEnvelope(clientId, browserClientId) {
 }
 
 export function runClientLeg(entry, sendJson, socket, browserClientId = null, options = {}) {
-  const {
-    maxFrameBytes = MAX_FRAME_BYTES,
-    inflightCeiling = MAX_INFLIGHT_BYTES,
-    ingress,
-    rawSocket = null,
-  } = options;
+  const { maxFrameBytes = MAX_FRAME_BYTES, inflightCeiling = MAX_INFLIGHT_BYTES, ingress, rawSocket = null } = options;
   const clientId = randomUUID();
   socket.browserClientId = browserClientId;
   socket.inflightCeiling = inflightCeiling;

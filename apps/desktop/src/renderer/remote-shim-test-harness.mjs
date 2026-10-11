@@ -156,7 +156,13 @@ export const withShim = async ({ secure = true } = {}, run) => {
 
     /** Open one socket attempt to the end of its handshake (secure) or to
      *  `onopen` (legacy). Returns what a test needs to talk to that leg. */
-    const dial = async ({ binaryFrames = false, remoteParity = false, browserParity = false, nativePush = false, ready = {} } = {}) => {
+    const dial = async ({
+      binaryFrames = false,
+      remoteParity = false,
+      browserParity = false,
+      nativePush = false,
+      ready = {},
+    } = {}) => {
       const known = FakeSocket.instances.length;
       const connecting = ctx.connect();
       await until(() => FakeSocket.instances.length === known + 1, 'a socket attempt');
@@ -172,7 +178,9 @@ export const withShim = async ({ secure = true } = {}, run) => {
         };
         return leg;
       }
-      const challenge = { ...createRelayE2EEChallenge(), ...(binaryFrames ? { binaryFrames: 1 } : {}),
+      const challenge = {
+        ...createRelayE2EEChallenge(),
+        ...(binaryFrames ? { binaryFrames: 1 } : {}),
         ...(remoteParity ? { remoteParity: 1 } : {}),
         ...(browserParity ? { browserParity: 1 } : {}),
         ...(nativePush ? { nativePush: 1 } : {}),

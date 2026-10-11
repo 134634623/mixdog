@@ -32,7 +32,11 @@ test('an address requested before the pane exists loads once when the guest appe
   requestBrowserPage('early', 'http://localhost:1/');
   let guest = null;
   const loaded = [];
-  const binding = bindRequestedAddress('early', () => guest, (url) => (loaded.push(url), true));
+  const binding = bindRequestedAddress(
+    'early',
+    () => guest,
+    (url) => (loaded.push(url), true)
+  );
   assert.deepEqual(loaded, []);
   guest = fakeGuest(true);
   binding.sync();
@@ -41,7 +45,11 @@ test('an address requested before the pane exists loads once when the guest appe
   binding.dispose();
   // Settled: a later pane for the session does not replay it.
   const again = [];
-  bindRequestedAddress('early', () => guest, (url) => (again.push(url), true)).dispose();
+  bindRequestedAddress(
+    'early',
+    () => guest,
+    (url) => (again.push(url), true)
+  ).dispose();
   assert.deepEqual(again, []);
 });
 
@@ -49,7 +57,11 @@ test('an address survives a guest element replacement and loads exactly once', (
   const first = fakeGuest(false);
   let current = first;
   const loaded = [];
-  const binding = bindRequestedAddress('swap', () => current, (url) => (loaded.push(url), true));
+  const binding = bindRequestedAddress(
+    'swap',
+    () => current,
+    (url) => (loaded.push(url), true)
+  );
   requestBrowserPage('swap', 'http://localhost:2/');
   assert.deepEqual(loaded, []);
   const second = fakeGuest(false);
@@ -70,10 +82,14 @@ test('a load that could not start keeps the address pending; the latest address 
   const guest = fakeGuest(true);
   let accept = false;
   const loaded = [];
-  const binding = bindRequestedAddress('late', () => guest, (url) => {
-    loaded.push(url);
-    return accept;
-  });
+  const binding = bindRequestedAddress(
+    'late',
+    () => guest,
+    (url) => {
+      loaded.push(url);
+      return accept;
+    }
+  );
   requestBrowserPage('late', 'http://localhost:3/a');
   requestBrowserPage('late', 'http://localhost:3/b');
   accept = true;

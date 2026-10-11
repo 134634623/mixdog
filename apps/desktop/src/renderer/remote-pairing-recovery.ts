@@ -68,7 +68,7 @@ export function migrateLegacyRemotePairing(
   for (const name of SCOPED_PAIRING_NAMES) storage.removeItem(legacy[name]);
 }
 
-const REMOTE_DEVICE_ID =/^[0-9a-f-]{8,64}$/u;
+const REMOTE_DEVICE_ID = /^[0-9a-f-]{8,64}$/u;
 const REMOTE_CLIENT_CREDENTIAL = /^[0-9a-f]{32,128}$/u;
 const DEVICE_COOKIE_NAME = 'mixdog_device';
 

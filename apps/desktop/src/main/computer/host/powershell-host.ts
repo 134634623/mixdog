@@ -219,7 +219,11 @@ export function createPowerShellComputerHost(
       const child = powerShellBySession.get(sessionId);
       // Never start a worker just to release: a retired worker held nothing.
       if (!child || child.killed) return;
-      const response = await callPowerShell({ action: 'release_sequence_holds', session_id: sessionId, read_only: false });
+      const response = await callPowerShell({
+        action: 'release_sequence_holds',
+        session_id: sessionId,
+        read_only: false,
+      });
       if (response.ok === false) throw sequenceHoldReleaseError(response.error);
     },
   });

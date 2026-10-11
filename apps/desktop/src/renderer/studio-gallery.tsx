@@ -1,6 +1,14 @@
 import { Ban, Check, Trash2 } from 'lucide-react';
 import { ErrorNotice } from './ErrorNotice';
-import { type CSSProperties, type ReactNode, type RefObject, type UIEvent, useCallback, useMemo, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  type UIEvent,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react';
 import {
   elementMenuPoint,
   isContextMenuKey,

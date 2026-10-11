@@ -11,9 +11,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'n
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolvePluginData } from '../shared/plugin-paths.mjs';
-import { effortJudgeInstallCurrent, effortJudgeInstallStamped, installEffortJudgeModel } from './model-install.mjs';
-
 import { onnxRuntimeSupported } from '../shared/onnx-runtime-support.mjs';
+import { effortJudgeInstallCurrent, effortJudgeInstallStamped, installEffortJudgeModel } from './model-install.mjs';
 
 export const EFFORT_JUDGE_UNSUPPORTED = 'Auto effort is unsupported on darwin-x64 (no onnxruntime-node binding)';
 const WORKER_PATH = fileURLToPath(new URL('./judge-worker.mjs', import.meta.url));

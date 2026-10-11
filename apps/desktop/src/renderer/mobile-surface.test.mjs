@@ -273,6 +273,29 @@ test('installed phone boot promotes only its locale and preserves asset priority
   }
 });
 
+test('a directly connected browser tab gets the installed-app boot gate; a plain tab does not', () => {
+  const gated = (marked) => {
+    const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', {
+      runScripts: 'outside-only',
+      url: 'https://mixdog.test/d/device/',
+    });
+    Object.defineProperty(dom.window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/144',
+    });
+    if (marked) dom.window.localStorage.setItem('mixdog.directBrowser', '1');
+    try {
+      dom.window.eval(bootSource);
+      return dom.window.document.documentElement.hasAttribute('data-mixdog-booting');
+    } finally {
+      dom.window.mixdogRevealApp?.();
+      dom.window.close();
+    }
+  };
+  assert.equal(gated(true), true);
+  assert.equal(gated(false), false);
+});
+
 test('only the Electron desktop promotes desktop-surface hints', () => {
   const markup = `<!doctype html><html><head>
       <meta name="viewport" content="width=device-width">
@@ -535,7 +558,11 @@ test('iPads and touch laptops pick the layout by viewport width', async () => {
 
     // Touch laptop: fine primary pointer, small screen, never a phone.
     define(dom.window.navigator, 'platform', 'Win32');
-    define(dom.window.navigator, 'userAgent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131');
+    define(
+      dom.window.navigator,
+      'userAgent',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131'
+    );
     define(dom.window, 'innerWidth', 700);
     define(dom.window.screen, 'width', 700);
     define(dom.window.screen, 'height', 700);

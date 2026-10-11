@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createRemoteMethods, executeRemoteFrame } from './remote-methods.ts';
+import { createRemoteMethods } from './remote-methods.ts';
 
 const CWD = process.cwd();
 const SESSION = `sess_desktop_${'a'.repeat(64)}`;

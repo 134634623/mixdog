@@ -67,7 +67,8 @@ test('a code expires after five minutes and a new lease replaces the old without
 test('callers cannot choose codes: malformed leases are refused and issued codes are relay-generated', () => {
   const codes = new PairCodes();
   const a = randomUUID();
-  for (const bad of ['short', 'has space!!', 123456, null, '123456']) assert.equal(codes.issue(a, bad, '').status, 'invalid');
+  for (const bad of ['short', 'has space!!', 123456, null, '123456'])
+    assert.equal(codes.issue(a, bad, '').status, 'invalid');
   assert.equal(codes.issue('not-an-id', LEASE, '').status, 'invalid');
   assert.equal(typeof codes.register, 'undefined');
   const issued = new Set();
@@ -180,8 +181,14 @@ test('relay: a desktop can no longer register a chosen code or probe for occupie
     await until(() => attacker.frames.some((frame) => frame.type === 'pair-code-issued'));
     const answer = attacker.frames.find((frame) => frame.type === 'pair-code-issued');
     assert.equal(answer.ok, true);
-    assert.equal(attacker.frames.some((frame) => frame.type === 'pair-code-ack'), false);
-    assert.doesNotMatch(JSON.stringify(attacker.frames), new RegExp(issued.code === answer.code ? 'never' : issued.code));
+    assert.equal(
+      attacker.frames.some((frame) => frame.type === 'pair-code-ack'),
+      false
+    );
+    assert.doesNotMatch(
+      JSON.stringify(attacker.frames),
+      new RegExp(issued.code === answer.code ? 'never' : issued.code)
+    );
     assert.equal((await post(origin, '/pair-code/resolve', { code: issued.code })).status, 200);
   });
 });
@@ -277,7 +284,10 @@ test('relay: oversize and malformed code requests are refused, cross-origin call
   await withRelay(async (_relay, origin) => {
     assert.equal((await post(origin, '/pair-code/resolve', { code: 'x'.repeat(5000) })).status, 400);
     assert.equal((await post(origin, '/pair-code/resolve', { code: 'abc' })).status, 404);
-    assert.equal((await post(origin, '/pair-code/resolve', { code: '123456' }, { Origin: 'https://evil.example' })).status, 403);
+    assert.equal(
+      (await post(origin, '/pair-code/resolve', { code: '123456' }, { Origin: 'https://evil.example' })).status,
+      403
+    );
     const preflight = await fetch(`${origin}/pair-code/resolve`, {
       method: 'OPTIONS',
       headers: { Origin: 'https://localhost' },

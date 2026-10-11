@@ -126,7 +126,14 @@ test('app-level Ctrl+F, Ctrl+K, Ctrl+digit and bracket shortcuts', async (t) => 
       );
     });
   const press = async (target, key, code = '', shiftKey = false) => {
-    const event = new window.KeyboardEvent('keydown', { key, code, shiftKey, ctrlKey: true, bubbles: true, cancelable: true });
+    const event = new window.KeyboardEvent('keydown', {
+      key,
+      code,
+      shiftKey,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
     await act(async () => target.dispatchEvent(event));
     return event.defaultPrevented;
   };

@@ -42,4 +42,3 @@ test('a call that finds its socket mid-rekey fails as interrupted and leaves the
     assert.equal(ctx.pending.size, 0);
   });
 });
-

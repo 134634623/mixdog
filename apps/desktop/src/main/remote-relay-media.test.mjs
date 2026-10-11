@@ -42,7 +42,8 @@ async function decodeWindow(key, request, sent) {
   const bodies = sent
     .filter((envelope) => envelope.type === 'media-chunk')
     .flatMap((envelope) => reader.push(Buffer.from(envelope.data, 'base64')));
-  const alignedStart = Math.floor(Number(/bytes=(\d+)/.exec(request.range)?.[1] ?? 0) / MEDIA_SEGMENT_BYTES) * MEDIA_SEGMENT_BYTES;
+  const alignedStart =
+    Math.floor(Number(/bytes=(\d+)/.exec(request.range)?.[1] ?? 0) / MEDIA_SEGMENT_BYTES) * MEDIA_SEGMENT_BYTES;
   const meta = await decryptMediaMeta(key, asset, alignedStart, bodies[0]);
   const parts = [];
   let offset = meta.start;
@@ -57,7 +58,15 @@ async function decodeWindow(key, request, sent) {
 test('a range is served as encrypted, segment-aligned frames that decrypt to the file bytes', async () => {
   const { bytes, assetId } = file('a.mp4', 200_000);
   const { key, lane, sent } = await makeLane();
-  const request = { id: 'r1', assetId, variant: 'original', method: 'GET', range: 'bytes=70000-70009', sid: SID, enc: ENC };
+  const request = {
+    id: 'r1',
+    assetId,
+    variant: 'original',
+    method: 'GET',
+    range: 'bytes=70000-70009',
+    sid: SID,
+    enc: ENC,
+  };
   await lane.serve(request);
   assert.equal(sent[0].type, 'media-head');
   assert.equal(sent[0].status, 200);
@@ -75,13 +84,29 @@ test('the last window stops at EOF and open-ended ranges are capped to one windo
   const tail = file('tail.mp4', 100_000);
   const big = file('big.mp4', MEDIA_WINDOW_MAX_BYTES * 2 + 5);
   const { key, lane, sent } = await makeLane();
-  const tailRequest = { id: 't', assetId: tail.assetId, variant: 'original', method: 'GET', range: 'bytes=65536-', sid: SID, enc: ENC };
+  const tailRequest = {
+    id: 't',
+    assetId: tail.assetId,
+    variant: 'original',
+    method: 'GET',
+    range: 'bytes=65536-',
+    sid: SID,
+    enc: ENC,
+  };
   await lane.serve(tailRequest);
   const tailWindow = await decodeWindow(key, tailRequest, sent);
   assert.equal(tailWindow.meta.end, 99_999);
   assert.deepEqual(tailWindow.plaintext, tail.bytes.subarray(65_536));
   sent.length = 0;
-  const bigRequest = { id: 'b', assetId: big.assetId, variant: 'original', method: 'GET', range: '', sid: SID, enc: ENC };
+  const bigRequest = {
+    id: 'b',
+    assetId: big.assetId,
+    variant: 'original',
+    method: 'GET',
+    range: '',
+    sid: SID,
+    enc: ENC,
+  };
   await lane.serve(bigRequest);
   const bigWindow = await decodeWindow(key, bigRequest, sent);
   assert.equal(bigWindow.meta.start, 0);
@@ -103,7 +128,10 @@ test('requests without a known session, or for unknown or unsupported things, ar
     sent.length = 0;
     await lane.serve(request);
     assert.equal(sent[0].status, status);
-    assert.equal(sent.some((envelope) => envelope.type === 'media-chunk'), false);
+    assert.equal(
+      sent.some((envelope) => envelope.type === 'media-chunk'),
+      false
+    );
   }
 });
 
@@ -115,21 +143,44 @@ test('a request that did not opt into the encrypted scheme is answered like no m
   // marker, or an unknown marker, gets nothing.
   for (const extra of [{}, { sid: SID }, { sid: SID, enc: '' }, { sid: SID, enc: 'e2ee0' }, { enc: ENC, sid: '' }]) {
     sent.length = 0;
-    await lane.serve({ id: 'old', assetId, variant: 'thumb', method: 'GET', range: 'bytes=0-9', sid: '', enc: '', ...extra });
+    await lane.serve({
+      id: 'old',
+      assetId,
+      variant: 'thumb',
+      method: 'GET',
+      range: 'bytes=0-9',
+      sid: '',
+      enc: '',
+      ...extra,
+    });
     assert.equal(sent[0].type, 'media-head');
     assert.ok([403, 404].includes(sent[0].status));
     if (!extra.enc || extra.enc !== ENC) assert.equal(sent[0].status, 404);
-    assert.equal(sent.some((envelope) => envelope.type === 'media-chunk'), false);
+    assert.equal(
+      sent.some((envelope) => envelope.type === 'media-chunk'),
+      false
+    );
   }
 });
 
 test('a backlogged socket holds the stream back and an abort ends it quietly', async () => {
   const { assetId } = file('slow.mp4', 300_000);
   const { lane, sent } = await makeLane({ backlog: 1e9 });
-  const serving = lane.serve({ id: 'slow', assetId, variant: 'original', method: 'GET', range: '', sid: SID, enc: ENC });
+  const serving = lane.serve({
+    id: 'slow',
+    assetId,
+    variant: 'original',
+    method: 'GET',
+    range: '',
+    sid: SID,
+    enc: ENC,
+  });
   await new Promise((resolve) => setTimeout(resolve, 150));
   assert.equal(sent.filter((envelope) => envelope.type === 'media-chunk').length, 1);
   lane.abort('slow');
   await serving;
-  assert.equal(sent.some((envelope) => envelope.type === 'media-end' || envelope.type === 'media-error'), false);
+  assert.equal(
+    sent.some((envelope) => envelope.type === 'media-end' || envelope.type === 'media-error'),
+    false
+  );
 });

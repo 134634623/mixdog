@@ -9,7 +9,11 @@ import test from 'node:test';
 import { MIXDOG_HOST_CSHARP } from './native-source.ts';
 import { INACTIVE_LEDGER_RECOVERY_PROGRAM } from './program.ts';
 import { settleElevatedLedger } from './worker-pool.ts';
-import { createInactiveLedgerRegistry, processIdentityGone, readProcessStartTicks } from './inactive-ledger-registry.ts';
+import {
+  createInactiveLedgerRegistry,
+  processIdentityGone,
+  readProcessStartTicks,
+} from './inactive-ledger-registry.ts';
 
 const exec = promisify(execFile);
 const STYLE_MEMBERS = `
@@ -20,9 +24,19 @@ const NOACTIVATE = 0x08000000;
 test('an elevated ledger is recovered at once only when its worker is known stopped', () => {
   const recovered = [];
   const held = [];
-  settleElevatedLedger(false, 'a', (p) => recovered.push(p), (p) => held.push(p));
+  settleElevatedLedger(
+    false,
+    'a',
+    (p) => recovered.push(p),
+    (p) => held.push(p)
+  );
   assert.deepEqual({ recovered, held }, { recovered: [], held: ['a'] });
-  settleElevatedLedger(true, 'b', (p) => recovered.push(p), (p) => held.push(p));
+  settleElevatedLedger(
+    true,
+    'b',
+    (p) => recovered.push(p),
+    (p) => held.push(p)
+  );
   assert.deepEqual({ recovered, held }, { recovered: ['b'], held: ['a'] });
 });
 

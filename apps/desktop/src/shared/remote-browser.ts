@@ -123,11 +123,7 @@ export function normalizeBrowserImportRequest(value: unknown): DesktopBrowserImp
   if (!/^[a-zA-Z0-9_-]{8,120}$/.test(jobId)) throw new TypeError('Browser import job id is invalid.');
   if (!sourceId || sourceId.length > 100) throw new TypeError('Browser import source id is invalid.');
   if (!profileId || profileId.length > 200) throw new TypeError('Browser import profile id is invalid.');
-  if (
-    !items.length ||
-    items.length > 3 ||
-    items.some((item) => !['passwords', 'cookies', 'history'].includes(item))
-  ) {
+  if (!items.length || items.length > 3 || items.some((item) => !['passwords', 'cookies', 'history'].includes(item))) {
     throw new TypeError('Browser import items are invalid.');
   }
   return {

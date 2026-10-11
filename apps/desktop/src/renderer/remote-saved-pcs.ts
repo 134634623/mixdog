@@ -94,10 +94,14 @@ export async function loadWebSwitcherPcs(doFetch: typeof fetch = fetch): Promise
   } catch {
     /* state unknown */
   }
+  const onlineState = (id: string): boolean | null => {
+    if (id === deviceId && online !== null) return online;
+    return id in presence ? presence[id] === true : null;
+  };
   return saved.map((pc) => ({
     id: pc.deviceId,
     name: pc.name,
-    online: pc.deviceId === deviceId && online !== null ? online : pc.deviceId in presence ? presence[pc.deviceId] === true : null,
+    online: onlineState(pc.deviceId),
     lastConnectedAt: pc.lastConnectedAt || null,
     current: pc.deviceId === deviceId,
   }));

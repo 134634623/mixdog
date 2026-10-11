@@ -21,6 +21,7 @@ const EXACT_SPAN = new RegExp(
   String.raw`<pre\b[\s\S]*?<\/pre>|\$\$[\s\S]*?\$\$|<code>[\s\S]*?<\/code>|` + INLINE_MATH_SOURCE,
   'g'
 );
+// biome-ignore lint/suspicious/noControlCharactersInRegex: NUL delimits the placeholders written by semanticMarkdown
 const EXACT_PLACEHOLDER = /<pre>\u0000(\d+)\u0000<\/pre>|\u0000(\d+)\u0000/g;
 
 /** Rendered HTML with presentation-only differences removed: whitespace
@@ -39,7 +40,10 @@ export function semanticMarkdown(markdown: string): string {
     .replace(/<\/p>\s*<\/li>/g, '</li>')
     .replace(/<\/p>\s*<(ul|ol)>/g, '<$1>')
     .replace(/\s+/g, ' ')
-    .replace(/\s*(<\/?(?:p|li|ul|ol|blockquote|table|thead|tbody|tr|th|td|h[1-6]|pre|hr|details|summary)\b[^>]*>)\s*/g, '$1')
+    .replace(
+      /\s*(<\/?(?:p|li|ul|ol|blockquote|table|thead|tbody|tr|th|td|h[1-6]|pre|hr|details|summary)\b[^>]*>)\s*/g,
+      '$1'
+    )
     .trim()
     .replace(EXACT_PLACEHOLDER, (_match, pre?: string, math?: string) => exact[Number(pre ?? math)]);
 }
@@ -56,19 +60,40 @@ export interface RichMarkdownCodec {
 /** Bare URLs as GFM autolinks them; their characters are written as typed,
  *  so the autolink reads back as exactly the typed text. */
 const BARE_URL = /(?:(?:https?|ftp):\/\/|www\.)[^\s<]*/gi;
-const INLINE_MATH_ANYWHERE = new RegExp(INLINE_MATH_SOURCE, 'g');
+const INLINE_MATH_AT = new RegExp(INLINE_MATH_SOURCE, 'y');
 
 /** Text escaping on top of the manager's own: bare URLs are left as typed,
- *  and `$…$` that would read back as math gets its opening `$` escaped. */
+ *  and `$…$` that would read back as math gets its opening `$` escaped.
+ *  A `$` inside a bare URL is never escaped (a backslash there would become
+ *  part of the URL): the URL is read first, so math cannot start in it. */
 function escapeRichMarkdownText(text: string, base: (text: string) => string): string {
   let out = '';
   let last = 0;
+  const urls: Array<[number, number]> = [];
   for (const match of text.matchAll(BARE_URL)) {
-    out += base(text.slice(last, match.index)) + match[0];
+    out += base(text.slice(last, match.index));
+    urls.push([out.length, out.length + match[0].length]);
+    out += match[0];
     last = match.index + match[0].length;
   }
   out += base(text.slice(last));
-  return out.replace(INLINE_MATH_ANYWHERE, (math) => `\\${math}`);
+  let escaped = '';
+  let copied = 0;
+  let url = 0;
+  for (let index = out.indexOf('$'); index !== -1; index = out.indexOf('$', index + 1)) {
+    while (url < urls.length && urls[url][1] <= index) url++;
+    if (url < urls.length && urls[url][0] <= index) {
+      index = urls[url][1] - 1;
+      continue;
+    }
+    INLINE_MATH_AT.lastIndex = index;
+    const math = INLINE_MATH_AT.exec(out);
+    if (!math) continue;
+    escaped += `${out.slice(copied, index)}\\`;
+    copied = index;
+    index += math[0].length - 1;
+  }
+  return escaped + out.slice(copied);
 }
 
 const escapingManagers = new WeakSet<MarkdownManager>();
@@ -98,14 +123,18 @@ export function richMarkdownCodecFor(schema: Schema, manager: MarkdownManager): 
 }
 
 /** A headless codec over the editor's exact extension set. */
-export function createRichMarkdownCodec(extensions: AnyExtension[] = createRichMarkdownExtensions()): RichMarkdownCodec {
-  const manager = new MarkdownManager({ marked: richMarkdownMarked() as never, markedOptions: { gfm: true }, extensions });
+export function createRichMarkdownCodec(
+  extensions: AnyExtension[] = createRichMarkdownExtensions()
+): RichMarkdownCodec {
+  const manager = new MarkdownManager({
+    marked: richMarkdownMarked() as never,
+    markedOptions: { gfm: true },
+    extensions,
+  });
   return richMarkdownCodecFor(getSchema(extensions), manager);
 }
 
-export type RichMarkdownRoundTrip =
-  | { ok: true; doc: JSONContent; canonical: string }
-  | { ok: false; reason: string };
+export type RichMarkdownRoundTrip = { ok: true; doc: JSONContent; canonical: string } | { ok: false; reason: string };
 
 /** Proves a body survives the editor: parsing it and writing it back must
  *  mean the same document, and the written form must be stable. */
@@ -134,8 +163,9 @@ export function checkRichMarkdownRoundTrip(codec: RichMarkdownCodec, body: strin
 }
 
 const decodeHref = (href: string) =>
-  href.replace(/&(amp|lt|gt|quot|#39);/g, (_entity, name: string) =>
-    ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[name] ?? name
+  href.replace(
+    /&(amp|lt|gt|quot|#39);/g,
+    (_entity, name: string) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[name] ?? name
   );
 
 /** A link GFM makes of bare text by itself (a URL, `www.` host or email
@@ -221,7 +251,9 @@ export function sameRichMarkdownDocument(
   const children = (doc: JSONContent | ProseMirrorNode) => {
     const node = 'nodeSize' in doc ? (doc as ProseMirrorNode) : schema.nodeFromJSON(doc);
     const list: ProseMirrorNode[] = [];
-    node.forEach((child) => list.push(child));
+    node.forEach((child) => {
+      list.push(child);
+    });
     return list;
   };
   return richMarkdownBlocksMeaning(children(a)) === richMarkdownBlocksMeaning(children(b));
@@ -277,7 +309,8 @@ export function markdownBlockSpans(text: string): { type: string; start: number;
   let offset = 0;
   for (const token of tokens) {
     if (text.slice(offset, offset + token.raw.length) !== token.raw) return null;
-    if (token.type !== 'space') spans.push({ type: token.type, start: offset, end: offset + token.raw.replace(/\n+$/, '').length });
+    if (token.type !== 'space')
+      spans.push({ type: token.type, start: offset, end: offset + token.raw.replace(/\n+$/, '').length });
     offset += token.raw.length;
   }
   return offset === text.length ? spans : null;
@@ -322,7 +355,8 @@ function myersPairs(
   for (let d = 0; d <= maxD; d++) {
     trace.push(v.slice());
     for (let k = -d; k <= d; k += 2) {
-      let x = k === -d || (k !== d && v[offset + k - 1] < v[offset + k + 1]) ? v[offset + k + 1] : v[offset + k - 1] + 1;
+      let x =
+        k === -d || (k !== d && v[offset + k - 1] < v[offset + k + 1]) ? v[offset + k + 1] : v[offset + k - 1] + 1;
       let y = x - k;
       while (x < n && y < m && same(x, y)) {
         x++;
@@ -335,7 +369,8 @@ function myersPairs(
           const previous = trace[step];
           const diagonal = x - y;
           const fromK =
-            diagonal === -step || (diagonal !== step && previous[offset + diagonal - 1] < previous[offset + diagonal + 1])
+            diagonal === -step ||
+            (diagonal !== step && previous[offset + diagonal - 1] < previous[offset + diagonal + 1])
               ? diagonal + 1
               : diagonal - 1;
           const fromX = previous[offset + fromK];
@@ -352,11 +387,60 @@ function myersPairs(
   return null;
 }
 
+/** How far `linearPairs` looks ahead for the next equal unit. */
+const LINEAR_LOOKAHEAD = 64;
+
+/** Unchanged pairs in linear time, for runs too far apart for a shortest
+ *  diff and without unique units to anchor on (repeated identical units):
+ *  runs of equal length pair units by position; otherwise a greedy walk
+ *  pairs equal units and, at a difference, skips ahead on whichever side
+ *  reaches the nearest equal pair (within a bounded window). */
+function linearPairs(
+  before: SourceUnit[],
+  after: SourceUnit[],
+  b0: number,
+  b1: number,
+  a0: number,
+  a1: number
+): [number, number][] {
+  const pairs: [number, number][] = [];
+  if (b1 - b0 === a1 - a0) {
+    for (let i = b0, j = a0; i < b1; i++, j++) if (before[i].key === after[j].key) pairs.push([i, j]);
+    return pairs;
+  }
+  let i = b0;
+  let j = a0;
+  while (i < b1 && j < a1) {
+    if (before[i].key === after[j].key) {
+      pairs.push([i++, j++]);
+      continue;
+    }
+    let skip: [number, number] | null = null;
+    for (let distance = 1; distance <= LINEAR_LOOKAHEAD && !skip; distance++) {
+      for (let di = 0; di <= distance; di++) {
+        const x = i + di;
+        const y = j + distance - di;
+        if (x < b1 && y < a1 && before[x].key === after[y].key) {
+          skip = [x, y];
+          break;
+        }
+      }
+    }
+    if (skip) [i, j] = skip;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return pairs;
+}
+
 /** Index pairs of units that stay unchanged between `before[b0, b1)` and
  *  `after[a0, a1)`. A shortest diff within the work budget; beyond it, units
  *  whose key is unique on both sides anchor the alignment (in order, the
  *  longest increasing run of them) and the gaps between are aligned the same
- *  way, so unchanged units keep their bytes however far apart the changes are. */
+ *  way, and runs with no such unit are aligned linearly (`linearPairs`), so
+ *  unchanged units keep their bytes however far apart the changes are. */
 function unchangedPairs(
   before: SourceUnit[],
   after: SourceUnit[],
@@ -406,8 +490,7 @@ function unchangedPairs(
   for (let index = tails.length ? tails[tails.length - 1] : -1; index !== -1; index = links[index]) {
     anchors.unshift(candidates[index]);
   }
-  // Without anchors the run cannot be narrowed: it is rewritten as one.
-  if (!anchors.length) return [...head, ...tail];
+  if (!anchors.length) return [...head, ...linearPairs(before, after, b0, b1, a0, a1), ...tail];
   const pairs: [number, number][] = [...head];
   let b = b0;
   let a = a0;
@@ -455,8 +538,7 @@ function spliceUnits(
   let b = prefix;
   let a = prefix;
   for (const [nextB, nextA] of anchors) {
-    const refined =
-      refine && nextB - b === 1 && nextA - a === 1 ? refine(source, before[b], target, after[a]) : null;
+    const refined = refine && nextB - b === 1 && nextA - a === 1 ? refine(source, before[b], target, after[a]) : null;
     if (refined !== null) {
       out += refined + source.slice(before[b].end, sourceAt(nextB));
     } else if (b < nextB || a < nextA) {
@@ -521,11 +603,17 @@ function refineList(source: string, a: Tokens.List, target: string, b: Tokens.Li
   const marker = (a.ordered ? ORDINAL : BULLET).exec(first)?.[2];
   if (!marker) return null;
   const adapt = (raw: string) => raw.replace(a.ordered ? ORDINAL : BULLET, `$1${marker}`);
-  const items = tiledUnits(source, a.items.map((item) => ({ raw: item.raw, key: itemKey(item.raw) })));
+  const items = tiledUnits(
+    source,
+    a.items.map((item) => ({ raw: item.raw, key: itemKey(item.raw) }))
+  );
   const editedRaws = b.items.map((item) => adapt(item.raw));
   const adapted = editedRaws.join('');
   if (target !== b.items.map((item) => item.raw).join('')) return null;
-  const editedItems = tiledUnits(adapted, editedRaws.map((raw) => ({ raw, key: itemKey(raw) })));
+  const editedItems = tiledUnits(
+    adapted,
+    editedRaws.map((raw) => ({ raw, key: itemKey(raw) }))
+  );
   return items && editedItems ? spliceUnits(source, items, adapted, editedItems, '\n', refineItem) : null;
 }
 
@@ -605,7 +693,9 @@ function refineTable(source: string, a: Tokens.Table, target: string, b: Tokens.
     const lines = text.split('\n');
     if (lines.length !== table.rows.length + 2) return null;
     const keys = ([table.header, table.align, ...table.rows] as unknown[][]).map((row) =>
-      JSON.stringify(row.map((cell) => (cell && typeof cell === 'object' ? semanticMarkdown((cell as Tokens.TableCell).text) : cell)))
+      JSON.stringify(
+        row.map((cell) => (cell && typeof cell === 'object' ? semanticMarkdown((cell as Tokens.TableCell).text) : cell))
+      )
     );
     return tiledUnits(
       text,
@@ -668,10 +758,7 @@ export function minimalTextEdit(before: string, after: string): { start: number;
   ) {
     tail++;
   }
-  while (
-    tail > 0 &&
-    (unsafeBoundary(before, before.length - tail) || unsafeBoundary(after, after.length - tail))
-  ) {
+  while (tail > 0 && (unsafeBoundary(before, before.length - tail) || unsafeBoundary(after, after.length - tail))) {
     tail--;
   }
   return { start, end: before.length - tail, text: after.slice(start, after.length - tail) };

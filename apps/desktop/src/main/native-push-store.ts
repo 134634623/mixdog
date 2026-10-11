@@ -42,17 +42,17 @@ const MAX_TOKEN_CHARS = 4096;
 function validNativePushToken(platform: NativePushPlatform, token: unknown): string {
   const value = typeof token === 'string' ? token.trim() : '';
   if (!value || value.length > MAX_TOKEN_CHARS) throw new TypeError('Native push token is invalid.');
-  const pattern = platform === 'apns' ? /^[0-9a-fA-F]{32,400}$/u : /^[A-Za-z0-9_:.\-]{32,4096}$/u;
+  const pattern = platform === 'apns' ? /^[0-9a-fA-F]{32,400}$/u : /^[A-Za-z0-9_:.-]{32,4096}$/u;
   if (!pattern.test(value)) throw new TypeError(`Native push token is not a valid ${platform.toUpperCase()} token.`);
   return value;
 }
 
-function validNativePushInput(input: {
-  platform: unknown;
-  token: unknown;
-  publicKey: unknown;
-  sandbox?: unknown;
-}): { platform: NativePushPlatform; token: string; publicKey: string; sandbox: boolean } {
+function validNativePushInput(input: { platform: unknown; token: unknown; publicKey: unknown; sandbox?: unknown }): {
+  platform: NativePushPlatform;
+  token: string;
+  publicKey: string;
+  sandbox: boolean;
+} {
   if (input.platform !== 'apns' && input.platform !== 'fcm') {
     throw new TypeError("Native push platform must be 'apns' or 'fcm'.");
   }

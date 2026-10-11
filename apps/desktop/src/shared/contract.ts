@@ -330,7 +330,9 @@ export interface DesktopApi {
   /** Settings → Connection → Connect to this PC: the 6-digit code. 'ensure'
    *  returns the live one (minting it if needed), 'renew' replaces it, and
    *  'release' withdraws it when the screen closes. */
-  getRemotePairCode?(action: 'ensure' | 'renew' | 'release'): Promise<DesktopRemotePairCode | DesktopRemotePairCodeUnsupported | null>;
+  getRemotePairCode?(
+    action: 'ensure' | 'renew' | 'release'
+  ): Promise<DesktopRemotePairCode | DesktopRemotePairCodeUnsupported | null>;
   /** A remote window's PC switcher asked this machine to show Settings →
    *  Connection → Connect to another PC. */
   subscribeShowConnectionSettings?(listener: () => void): () => void;

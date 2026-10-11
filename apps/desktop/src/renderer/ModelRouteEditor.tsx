@@ -7,7 +7,7 @@ import {
   preferredModelParameters,
   speedRouteFields,
 } from './model-route-utils';
-import { defaultContextPercent } from './model-controls';
+import { contextSliderPercent, contextTokensForPercent, defaultContextPercent } from './model-controls';
 import { modelContextWindow, modelDisplayName, modelFastAvailable, modelMaxContextWindow } from './provider-display';
 import { RouteEditor } from './RouteEditor';
 
@@ -79,13 +79,15 @@ export function ModelRouteEditor({
   const autoEffortRoute = useAutoEffortRoute(composerParity && selected?.autoEffortCapable === true);
   const contextDefaultPercent = defaultContextPercent(defaultWindow, maxWindow);
   const contextPercent = contextVisible
-    ? Math.max(10, Math.min(100, Math.round((Number(value.contextPercent) || contextDefaultPercent) / 10) * 10))
+    ? contextSliderPercent(Number(value.contextPercent) || contextDefaultPercent)
     : 100;
-  const contextTokens = !contextVisible
-    ? 0
-    : contextPercent === contextDefaultPercent
-      ? defaultWindow
-      : Math.floor((maxWindow * contextPercent) / 100);
+  const contextTokens = contextVisible
+    ? contextTokensForPercent(contextPercent, {
+        defaultPercent: contextDefaultPercent,
+        defaultTokens: defaultWindow,
+        maxTokens: maxWindow,
+      })
+    : 0;
 
   return (
     <RouteEditor

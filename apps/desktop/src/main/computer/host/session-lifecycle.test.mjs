@@ -525,7 +525,7 @@ test('a user Stop promotes a held elevated ledger and recovers it in the same cl
       cleanupInput: async () => {
         const offered = registry.recoverable();
         seenByCleanup.push(...offered);
-        offered.forEach((path) => registry.forget(path));
+        for (const path of offered) registry.forget(path);
         return true;
       },
       runCommand: async () => ({ text: '' }),

@@ -30,7 +30,10 @@ const LEGACY_HOST_BLOCKED_CAPABILITIES: ReadonlySet<string> = new Set([
  *  that must react to the host's level subscribe with `useRemoteHostOpenAccess`. */
 export function capabilityBlockedRemotely(capability: string): boolean {
   if (!isRemoteHostRenderer()) return false;
-  return remoteCapabilityBlocked(capability) || (!isRemoteHostOpenAccess() && LEGACY_HOST_BLOCKED_CAPABILITIES.has(capability));
+  return (
+    remoteCapabilityBlocked(capability) ||
+    (!isRemoteHostOpenAccess() && LEGACY_HOST_BLOCKED_CAPABILITIES.has(capability))
+  );
 }
 
 /** Short note shown next to controls that only work on the host computer. */

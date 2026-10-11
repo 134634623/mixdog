@@ -7,6 +7,7 @@ import { t } from './i18n';
 import { useMobileBack } from './mobile-back';
 import { useSurfaceActive } from './surface-activity';
 import { captureRowMenuAnchor, positionRowMenu } from './row-menu-geometry';
+import { isContextMenuKey, pointerMenuPoint } from './ScmContextMenu';
 
 type RowOverflowMenuItem = {
   /** Stable semantic action identity; labels may change while the menu stays open. */
@@ -43,12 +44,12 @@ export function rowOverflowHostProps() {
   return {
     onContextMenu(event: MouseEvent<HTMLElement>) {
       if (isEditableTarget(event.target)) return;
-      if (requestRowOverflowOpen(event.currentTarget, { x: event.clientX, y: event.clientY })) {
+      if (requestRowOverflowOpen(event.currentTarget, pointerMenuPoint(event))) {
         event.preventDefault();
       }
     },
     onKeyDown(event: KeyboardEvent<HTMLElement>) {
-      if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return;
+      if (!isContextMenuKey(event)) return;
       if (isEditableTarget(event.target)) return;
       if (requestRowOverflowOpen(event.currentTarget)) event.preventDefault();
     },
@@ -282,7 +283,6 @@ export function RowOverflowMenu({ label, items }: { label: string; items: RowOve
   };
   // A host element (see rowOverflowHostProps) asks this menu to open, at the
   // pointer when coordinates are given, otherwise at the trigger.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only the stable trigger ref and setOpen setter are used.
   useEffect(() => {
     const element = trigger.current;
     if (!element) return undefined;

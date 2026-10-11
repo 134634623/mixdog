@@ -186,7 +186,10 @@ test('only the connected host takes its actions; other hosts stay parked, and ac
   assert.equal(await drainNativeNotificationActions({ native, api, hostId: 'hostA' }), 2);
   await until(() => items.length === 1);
   assert.deepEqual(resolved, [['s1', 'a1', { approved: true }]]);
-  assert.deepEqual(items.map((a) => a.id), ['h-b1']);
+  assert.deepEqual(
+    items.map((a) => a.id),
+    ['h-b1']
+  );
 });
 
 test('an approval nobody answered stays parked and is retried by the next drain', async () => {

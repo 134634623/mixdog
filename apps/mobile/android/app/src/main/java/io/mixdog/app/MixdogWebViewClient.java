@@ -6,11 +6,11 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
-import java.io.ByteArrayInputStream;
-import java.util.HashMap;
 import android.webkit.WebView;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeWebViewClient;
+import java.io.ByteArrayInputStream;
+import java.util.HashMap;
 
 /**
  * Top-level navigation is limited to the bundled pairing screen and the saved

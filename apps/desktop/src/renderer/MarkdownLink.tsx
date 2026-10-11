@@ -452,7 +452,7 @@ function useLocalLinkTarget(target: string, verify = false): LocalLinkTarget {
       const { project, path: file } = await resolveTarget();
       await copyTextToClipboard(displayPath(project, file, ''));
     } catch (error) {
-      showDesktopToast(t('Unable to open file: {{error}}', { error: errorMessageText(error) }), 'error');
+      showDesktopToast(`${t('Copy failed')}: ${errorMessageText(error)}`, 'error');
     }
   };
   return {

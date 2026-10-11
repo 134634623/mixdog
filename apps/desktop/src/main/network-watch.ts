@@ -7,7 +7,9 @@ import { networkInterfaces } from 'node:os';
 const NETWORK_POLL_MS = 2_000;
 
 /** A stable signature of the machine's external addresses. */
-export function networkSignature(interfaces: NodeJS.Dict<Array<{ address: string; internal: boolean }>> = networkInterfaces()): string {
+export function networkSignature(
+  interfaces: NodeJS.Dict<Array<{ address: string; internal: boolean }>> = networkInterfaces()
+): string {
   const addresses: string[] = [];
   for (const [name, list] of Object.entries(interfaces)) {
     for (const entry of list ?? []) if (!entry.internal) addresses.push(`${name}:${entry.address}`);
