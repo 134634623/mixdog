@@ -224,8 +224,66 @@ test('a focused code editor keeps Ctrl+Arrow for word jumps and line scrolling',
   assert.deepEqual(navigated, []);
   assert.deepEqual(vertical, []);
 
-  assert.equal(await press(plain, 'ArrowRight'), true);
+  // Ctrl+Left/Right stays a word jump everywhere; Ctrl+PageDown crosses tabs.
+  assert.equal(await press(plain, 'ArrowRight'), false);
+  assert.equal(await press(plain, 'PageDown'), true);
   assert.equal(await press(plain, 'ArrowDown'), true);
   assert.deepEqual(navigated, ['b']);
   assert.deepEqual(vertical, ['down']);
+});
+
+test('Alt+Left/Right walks history everywhere except the browser page and terminal', async (t) => {
+  const host = document.createElement('main');
+  const plain = document.createElement('textarea');
+  const terminal = document.createElement('div');
+  terminal.className = 'xterm';
+  const browser = document.createElement('div');
+  browser.className = 'browser-pane';
+  document.body.append(host, plain, terminal, browser);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    plain.remove();
+    terminal.remove();
+    browser.remove();
+  });
+  const calls = [];
+  const noop = () => {};
+  await act(async () => {
+    root.render(
+      React.createElement(Harness, {
+        actions: {
+          tabs: [],
+          activeTabKey: '',
+          navigateTab: noop,
+          startTask: noop,
+          openSettings: noop,
+          toggleSidebar: noop,
+          toggleDock: noop,
+          togglePanel: noop,
+          openQuickAccess: noop,
+          openCommandPalette: noop,
+          openFindInFiles: noop,
+          openTabSwitcher: noop,
+          focusSiblingPane: noop,
+          focusVerticalPane: noop,
+          navigateBack: () => calls.push('back'),
+          navigateForward: () => calls.push('forward'),
+        },
+      })
+    );
+  });
+  const press = async (target, key) => {
+    const event = new window.KeyboardEvent('keydown', { key, altKey: true, bubbles: true, cancelable: true });
+    await act(async () => {
+      target.dispatchEvent(event);
+    });
+    return event.defaultPrevented;
+  };
+  assert.equal(await press(plain, 'ArrowLeft'), true);
+  assert.equal(await press(plain, 'ArrowRight'), true);
+  assert.equal(await press(terminal, 'ArrowLeft'), false);
+  assert.equal(await press(browser, 'ArrowLeft'), false);
+  assert.deepEqual(calls, ['back', 'forward']);
 });

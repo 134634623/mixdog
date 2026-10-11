@@ -72,7 +72,8 @@ export interface DesktopService {
     projectIdOrWorkspaceId: string,
     query: string,
     limit?: number,
-    includeIgnored?: boolean
+    includeIgnored?: boolean,
+    includeDirectories?: boolean
   ): Promise<string[]>;
   submitNewTask(
     prompt: DesktopPromptContent,

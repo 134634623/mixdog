@@ -305,6 +305,7 @@ const loadCustomProviderModule = () => import('../../runtime/agent/orchestrator/
 function customProviderRow(id, entry, checkSecrets = true) {
   const configuredEnabled = entry.enabled !== false;
   const stored = checkSecrets ? hasStoredSecret(SECRET_ACCOUNTS.agentApiKey(id)) : false;
+  const unstoredStatus = configuredEnabled ? 'No Key' : 'Off';
   return {
     id,
     name: entry.name,
@@ -319,7 +320,7 @@ function customProviderRow(id, entry, checkSecrets = true) {
     stored,
     env: false,
     envName: null,
-    status: stored ? 'Set' : configuredEnabled ? 'No Key' : 'Off',
+    status: stored ? 'Set' : unstoredStatus,
     detail: stored ? 'stored in keychain' : 'custom endpoint',
   };
 }
@@ -791,15 +792,11 @@ export async function discoverCustomProviderModels(cfgMod, rawInput) {
     return { models };
   } catch (error) {
     const status = Number.isInteger(error?.status) ? error.status : undefined;
+    const authKind = status === 401 || status === 403 ? 'authentication' : 'request';
     return {
       models: [],
       error: {
-        kind:
-          status === 404 || status === 405
-            ? 'unavailable'
-            : status === 401 || status === 403
-              ? 'authentication'
-              : 'request',
+        kind: status === 404 || status === 405 ? 'unavailable' : authKind,
         ...(status === undefined ? {} : { status }),
         message: sanitizeCustomError(error, [apiKey]).message,
       },

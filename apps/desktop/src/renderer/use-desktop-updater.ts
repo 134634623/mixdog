@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DesktopUpdaterState } from '../shared/contract';
+import { REMOTE_CONNECTION_READY_EVENT } from './remote-connection-state';
 
 type Invoke = (action: () => unknown) => Promise<void>;
 
@@ -35,13 +36,12 @@ export function useDesktopUpdater(invoke: Invoke) {
       if (live) setState(next);
     });
     // Remote clients: a read made while the connection was down fails and
-    // would leave the update state stale until a reload. Same value as
-    // REMOTE_CONNECTION_READY_EVENT (remote-shim-state).
-    if (read) window.addEventListener('mixdog:remote-connection-ready', read);
+    // would leave the update state stale until a reload.
+    if (read) window.addEventListener(REMOTE_CONNECTION_READY_EVENT, read);
     return () => {
       live = false;
       unsubscribe?.();
-      if (read) window.removeEventListener('mixdog:remote-connection-ready', read);
+      if (read) window.removeEventListener(REMOTE_CONNECTION_READY_EVENT, read);
     };
   }, []);
 

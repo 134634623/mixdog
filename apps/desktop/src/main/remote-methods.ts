@@ -720,7 +720,7 @@ export function createRemoteMethods(
     listAgentPool: () => host.listAgentPool(),
     searchSessionContent: ([query]) => host.searchSessionContent(requiredSessionContentQuery(query)),
     ...sessionRemoteMethods(host, client, browserRemote),
-    searchProjectFiles: ([projectIdOrWorkspaceId, query, limit, includeIgnored]) => {
+    searchProjectFiles: ([projectIdOrWorkspaceId, query, limit, includeIgnored, includeDirectories]) => {
       if (typeof query !== 'string' || query.length > 1_024) {
         throw new TypeError('query is invalid.');
       }
@@ -728,7 +728,8 @@ export function createRemoteMethods(
         requiredString(projectIdOrWorkspaceId, 'projectIdOrWorkspaceId'),
         query,
         requiredFileSearchLimit(limit),
-        includeIgnored === true
+        includeIgnored === true,
+        includeDirectories === true
       );
     },
     getSnapshot: () => host.getSnapshot(),

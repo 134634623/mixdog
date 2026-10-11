@@ -19,12 +19,8 @@ import {
   type MixdogNativeInfo,
   type NativeNotificationAction,
 } from '../shared/native-app';
+import { REMOTE_CONNECTION_READY_EVENT } from './remote-connection-state';
 import type { RemoteShimContext } from './remote-shim-state';
-
-/** Same value as REMOTE_CONNECTION_READY_EVENT (remote-shim-state), which this
- *  module must not import at runtime: the navigation hook that subscribes here
- *  ships in every renderer bundle and would pull the whole shim along. */
-const REMOTE_CONNECTION_READY_EVENT = 'mixdog:remote-connection-ready';
 
 interface NativePushRegistration {
   platform: 'apns' | 'fcm';

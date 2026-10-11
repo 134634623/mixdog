@@ -358,10 +358,11 @@ export class SessionHostLifecycle {
     projectIdOrWorkspaceId: string,
     query: string,
     limit = 50,
-    includeIgnored = false
+    includeIgnored = false,
+    includeDirectories = false
   ): Promise<string[]> {
     const root = await this.owner.projectDirectory(projectIdOrWorkspaceId);
-    return searchProjectDirectory(root, query, limit, { includeIgnored });
+    return searchProjectDirectory(root, query, limit, { includeIgnored, includeDirectories });
   }
 
   async submitNewTask(

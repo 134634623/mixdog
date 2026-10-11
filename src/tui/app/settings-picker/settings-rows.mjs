@@ -66,11 +66,9 @@ export function buildSettingsItems({
   const { workflow, mcp, plugins, skills } = view;
   const outputStyleLabel =
     outputStyle?.current?.label || outputStyle?.current?.id || outputStyle?.configured || 'Default';
-  const autoClearSource = autoClear.providerCustom
-    ? ` (${autoClear.provider} override)`
-    : autoClear.custom
-      ? ' (global)'
-      : ` (${autoClear.provider || 'default'} default)`;
+  let autoClearSource = ` (${autoClear.provider || 'default'} default)`;
+  if (autoClear.providerCustom) autoClearSource = ` (${autoClear.provider} override)`;
+  else if (autoClear.custom) autoClearSource = ' (global)';
   return [
     {
       value: 'model',

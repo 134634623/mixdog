@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { REMOTE_CONNECTION_READY_EVENT } from './remote-connection-state';
 import { isRemoteHostRenderer } from './remote-ui-projection';
 
 // `preparing` runs from the tap until audio is actually captured: a phone
@@ -186,14 +187,12 @@ export function useComposerDictation({
     window.addEventListener('mixdog:voice-runtime-changed', refresh);
     // Remote clients: a probe made while the connection was down (or still
     // syncing) fails and would hide the mic until a reload. Re-probe every
-    // time the connection becomes ready. Same value as
-    // REMOTE_CONNECTION_READY_EVENT (remote-shim-state), not imported so the
-    // desktop composer does not pull the remote shim in.
-    window.addEventListener('mixdog:remote-connection-ready', refresh);
+    // time the connection becomes ready.
+    window.addEventListener(REMOTE_CONNECTION_READY_EVENT, refresh);
     return () => {
       live = false;
       window.removeEventListener('mixdog:voice-runtime-changed', refresh);
-      window.removeEventListener('mixdog:remote-connection-ready', refresh);
+      window.removeEventListener(REMOTE_CONNECTION_READY_EVENT, refresh);
     };
   }, []);
   const dictationSession = useRef<{

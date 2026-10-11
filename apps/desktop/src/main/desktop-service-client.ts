@@ -748,9 +748,10 @@ export class DesktopServiceClient implements DesktopService {
     projectIdOrWorkspaceId: string,
     query: string,
     limit = 50,
-    includeIgnored = false
+    includeIgnored = false,
+    includeDirectories = false
   ): Promise<string[]> {
-    return this.invokeRead('searchProjectFiles', [projectIdOrWorkspaceId, query, limit, includeIgnored]);
+    return this.invokeRead('searchProjectFiles', [projectIdOrWorkspaceId, query, limit, includeIgnored, includeDirectories]);
   }
   submitNewTask(
     prompt: DesktopPromptContent,

@@ -25,7 +25,7 @@ import { createRemoteViewBaselineCache } from '../shared/remote-view-baseline';
 import { createSnapshotDeltaDecoder } from '../main/state-delta';
 import { newBrowserId } from './remote-browser-identity';
 import { createCompactTranscriptExpander } from './remote-compact-frames';
-import { reportRemoteConnectionIssue } from './remote-connection-state';
+import { REMOTE_CONNECTION_READY_EVENT, reportRemoteConnectionIssue } from './remote-connection-state';
 import {
   REMOTE_PAIRING_STORAGE_KEYS,
   canReuseStoredRemoteClientRegistration,
@@ -43,7 +43,7 @@ import type { createRemoteViewSync } from './remote-view-sync';
 
 export const DEVICE_STORAGE_KEY = REMOTE_PAIRING_STORAGE_KEYS.device;
 export const REMOTE_CREDENTIAL_READY_EVENT = 'mixdog:remote-credential-ready';
-export const REMOTE_CONNECTION_READY_EVENT = 'mixdog:remote-connection-ready';
+export { REMOTE_CONNECTION_READY_EVENT };
 export const REMOTE_PAIRING_INVALID_EVENT = 'mixdog:remote-pairing-invalid';
 export const VISIBLE_SESSIONS_STORAGE_KEY = 'mixdog.remote-visible-sessions';
 export const LAST_SESSION_STORAGE_KEY = 'mixdog.desktop-last-session.v1';

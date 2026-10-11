@@ -391,6 +391,39 @@ export function Conversation({
       onOpenSettings,
     });
 
+  let approvalCard: ReactNode = null;
+  if (snapshot.toolApproval) {
+    approvalCard = (
+      <ApprovalCard
+        key={approvalInstanceKey(snapshot.toolApproval.id)}
+        approval={snapshot.toolApproval}
+        elsewhereDevice={
+          multiDevice && snapshot.toolApprovalResult?.id === snapshot.toolApproval.id
+            ? (snapshot.toolApprovalResult?.device ?? '')
+            : ''
+        }
+        resolve={async (approved) => {
+          const host = window.mixdogDesktop;
+          const sessionId = routeSessionIdRef.current;
+          const approvalId = String(snapshot.toolApproval?.id || '');
+          if (!sessionId) return false;
+          const accepted = await host.resolveToolApprovalForSession(sessionId, approvalId, { approved });
+          if (accepted === true) decidedLocally.current.add(approvalId);
+          return accepted;
+        }}
+      />
+    );
+  } else if (retiredApproval) {
+    approvalCard = (
+      <ApprovalCard
+        key={`retired:${approvalInstanceKey(retiredApproval.approval.id)}`}
+        approval={retiredApproval.approval}
+        outcome={retiredApproval.outcome}
+        resolve={async () => true}
+      />
+    );
+  }
+
   return (
     <section
       className={`conversation${readOnly ? ' conversation-read-only' : ''}`}
@@ -504,35 +537,7 @@ export function Conversation({
           onOpenFile={onOpenFile}
           goalIsland={goalIsland}
           goalSubmissionId={goalSubmissionId}
-          approval={
-            snapshot.toolApproval ? (
-              <ApprovalCard
-                key={approvalInstanceKey(snapshot.toolApproval.id)}
-                approval={snapshot.toolApproval}
-                elsewhereDevice={
-                  multiDevice && snapshot.toolApprovalResult?.id === snapshot.toolApproval.id
-                    ? (snapshot.toolApprovalResult?.device ?? '')
-                    : ''
-                }
-                resolve={async (approved) => {
-                  const host = window.mixdogDesktop;
-                  const sessionId = routeSessionIdRef.current;
-                  const approvalId = String(snapshot.toolApproval?.id || '');
-                  if (!sessionId) return false;
-                  const accepted = await host.resolveToolApprovalForSession(sessionId, approvalId, { approved });
-                  if (accepted === true) decidedLocally.current.add(approvalId);
-                  return accepted;
-                }}
-              />
-            ) : retiredApproval ? (
-              <ApprovalCard
-                key={`retired:${approvalInstanceKey(retiredApproval.approval.id)}`}
-                approval={retiredApproval.approval}
-                outcome={retiredApproval.outcome}
-                resolve={async () => true}
-              />
-            ) : null
-          }
+          approval={approvalCard}
           showProjectSelector={showProjectSelector}
           contextBar={
             <>

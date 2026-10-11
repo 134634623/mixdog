@@ -356,12 +356,14 @@ export interface DesktopApi {
   resyncSessionState?(sessionId: string): void;
   /** Register every visible session for owner-pipe mirroring. */
   setVisibleSessions?(sessionIds: string[]): Promise<boolean>;
-  /** `includeIgnored` also searches gitignored folders (chat file links). */
+  /** `includeIgnored` also searches gitignored folders (chat file links);
+   *  `includeDirectories` also returns folders as `path/` (@-mentions). */
   searchProjectFiles(
     projectIdOrWorkspaceId: string,
     query: string,
     limit?: number,
-    includeIgnored?: boolean
+    includeIgnored?: boolean,
+    includeDirectories?: boolean
   ): Promise<string[]>;
   searchWorkspaceText?(
     projectPath: string,

@@ -2,12 +2,11 @@ import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } 
 
 import type { DesktopRemoteBrowserStreamFrame } from '../shared/contract';
 import type { RemoteInputFrame } from './remote-browser-input-client';
+import { REMOTE_CONNECTION_READY_EVENT } from './remote-connection-state';
 
 /** The desktop stops a stream that is not renewed for 4s. */
 export const STREAM_RENEW_MS = 2_000;
-/** Same value as REMOTE_CONNECTION_READY_EVENT (remote-shim-state), which the
- * pane must not import: it would pull the whole shim into this chunk. */
-export const REMOTE_CONNECTION_READY_EVENT = 'mixdog:remote-connection-ready';
+export { REMOTE_CONNECTION_READY_EVENT };
 const FALLBACK_STREAM_BOX = { maxWidth: 1280, maxHeight: 720 };
 
 export type StreamFrameMeta = Omit<DesktopRemoteBrowserStreamFrame, 'image'>;

@@ -69,10 +69,23 @@ export function useWorkspaceShortcuts(actions: WorkspaceShortcutActions) {
     /** The keymap itself: returns the command for an event, or null. */
     const resolve = (event: globalThis.KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey;
+      const target = event.target as Partial<Element> | null;
+      // Alt+Left/Right walks editor history (VS Code); the browser page and
+      // the terminal keep it for their own back/forward and word motion.
+      if (
+        event.altKey &&
+        !mod &&
+        !event.shiftKey &&
+        (event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
+        !target?.closest?.('.browser-pane, .browser-isolated-view, .xterm')
+      ) {
+        return event.key === 'ArrowLeft'
+          ? () => actionsRef.current.navigateBack()
+          : () => actionsRef.current.navigateForward();
+      }
       if (!mod) return null;
       const key = event.key.toLowerCase();
       const plain = !event.shiftKey && !event.altKey;
-      const target = event.target as Partial<Element> | null;
       const inEditor = Boolean(target?.closest?.('.monaco-editor'));
       if (plain && event.key.startsWith('Arrow') && inEditor) return null;
       if (!event.altKey && (event.code === 'BracketLeft' || event.code === 'BracketRight')) {
@@ -91,17 +104,13 @@ export function useWorkspaceShortcuts(actions: WorkspaceShortcutActions) {
         return tab ? () => navigateTab(tab) : null;
       }
       if (plain && key === 'f' && actionsRef.current.tabs.length === 0) return openSessionSearch;
-      if (plain && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-        const offset = event.key === 'ArrowLeft' ? -1 : 1;
-        return () => cycleTab(offset, true);
-      }
       if (plain && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
         const direction = event.key === 'ArrowUp' ? 'up' : 'down';
         return () => actionsRef.current.focusVerticalPane(direction);
       }
       if (plain && (event.key === 'PageUp' || event.key === 'PageDown')) {
         const offset = event.key === 'PageDown' ? 1 : -1;
-        return () => cycleTab(offset);
+        return () => cycleTab(offset, true);
       }
       if (event.key === 'Tab' && !event.altKey) {
         const offset = event.shiftKey ? -1 : 1;

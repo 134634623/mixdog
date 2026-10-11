@@ -29,14 +29,10 @@ export function hydrateProviderModelRow(cfg, row) {
   // route selection are untouched.
   const alias = typeof saved.alias === 'string' ? saved.alias.trim() : '';
   const fastCapable = fastCapableFor(row.provider, row);
+  const existingOptions = Array.isArray(row.modelParameterOptions) ? row.modelParameterOptions : [];
   const modelParameterOptions =
     fastCapable && ultrafastCapableFor(row.provider, row)
-      ? [
-          ...(Array.isArray(row.modelParameterOptions) ? row.modelParameterOptions : []).filter(
-            (option) => option?.id !== ULTRAFAST_SPEED_OPTION.id
-          ),
-          ULTRAFAST_SPEED_OPTION,
-        ]
+      ? [...existingOptions.filter((option) => option?.id !== ULTRAFAST_SPEED_OPTION.id), ULTRAFAST_SPEED_OPTION]
       : row.modelParameterOptions;
   return {
     ...row,

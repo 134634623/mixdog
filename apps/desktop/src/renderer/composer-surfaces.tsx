@@ -124,7 +124,8 @@ export function SlashPalette({
 }
 
 function splitMentionPath(path: string): { directory: string; filename: string } {
-  const separator = path.lastIndexOf('/');
+  // Folder rows end in `/`; the folder's own name is the bold part.
+  const separator = path.lastIndexOf('/', path.length - 2);
   if (separator < 0) return { directory: '', filename: path };
   return { directory: path.slice(0, separator + 1), filename: path.slice(separator + 1) };
 }
@@ -172,7 +173,7 @@ export function MentionPalette({
             onMouseEnter={() => setIndex(rowIndex)}
             onClick={() => onSelect(path)}
           >
-            <MxIcon name="open-file" size={14} />
+            <MxIcon name={path.endsWith('/') ? 'folder' : 'open-file'} size={14} />
             <span className="mention-path">
               <span>{directory}</span>
               <strong>{filename}</strong>

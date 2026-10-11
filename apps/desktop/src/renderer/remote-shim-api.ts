@@ -196,8 +196,14 @@ export const createRemoteApi = (ctx: RemoteShimContext): DesktopApi => {
         return true;
       });
     },
-    searchProjectFiles: (projectIdOrWorkspaceId, query, limit, includeIgnored) =>
-      call('searchProjectFiles', [projectIdOrWorkspaceId, query, limit, includeIgnored === true]),
+    searchProjectFiles: (projectIdOrWorkspaceId, query, limit, includeIgnored, includeDirectories) =>
+      call('searchProjectFiles', [
+        projectIdOrWorkspaceId,
+        query,
+        limit,
+        includeIgnored === true,
+        includeDirectories === true,
+      ]),
     getSnapshot: () => call('getSnapshot'),
     subscribeState: (listener) => listenOn(stateListeners, listener),
     termEnsure: (id, cwd, shell) => call('termEnsure', [id, cwd ?? null, shell ?? null]),

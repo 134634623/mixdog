@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { beginBootSurface, reportBootSurfaceReady } from './boot-metrics';
+import { REMOTE_CONNECTION_READY_EVENT } from './remote-connection-state';
 import { usagePinStackFits } from './rail-usage-pin-room';
 import type { UsageDashboardSnapshot } from './usage-dashboard-store';
 import { subscribeSetupChanges } from './setup-change-refresh';
@@ -77,13 +78,12 @@ export function useUsageRailPin(
     const unsubscribe = subscribeSetupChanges(read);
     // Remote clients: a read made while the connection was down fails and
     // would keep the code default (pinned) over the user's real choice until
-    // a reload. Same value as REMOTE_CONNECTION_READY_EVENT (remote-shim-state),
-    // not imported so the desktop rail does not pull the remote shim in.
-    window.addEventListener('mixdog:remote-connection-ready', read);
+    // a reload.
+    window.addEventListener(REMOTE_CONNECTION_READY_EVENT, read);
     return () => {
       live = false;
       unsubscribe();
-      window.removeEventListener('mixdog:remote-connection-ready', read);
+      window.removeEventListener(REMOTE_CONNECTION_READY_EVENT, read);
     };
   }, [enabled]);
 

@@ -14,12 +14,11 @@ function hydrateTolerantly(pastedImages, pastedTexts, content = null) {
   };
   const hydrated = hydratePastedAttachments(pastedImages, pastedTexts, { onUnreadable });
   const files = hydrateRestorableFileParts(content, { onUnreadable });
+  const verb = unreadable === 1 ? ' was' : 's were';
   return {
     ...hydrated,
     ...(files.length ? { content: files } : {}),
-    notice: unreadable
-      ? `${unreadable} attachment${unreadable === 1 ? ' was' : 's were'} no longer available and dropped.`
-      : '',
+    notice: unreadable ? `${unreadable} attachment${verb} no longer available and dropped.` : '',
   };
 }
 

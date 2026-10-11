@@ -198,8 +198,15 @@ const api: DesktopApi = {
   prefetchSession: (sessionId, transcriptItemLimit, readTraceId) =>
     ipcRenderer.invoke(DESKTOP_IPC.prefetchSession, sessionId, transcriptItemLimit, readTraceId),
   setVisibleSessions: (sessionIds) => ipcRenderer.invoke(DESKTOP_IPC.setVisibleSessions, sessionIds),
-  searchProjectFiles: (projectIdOrWorkspaceId, query, limit, includeIgnored) =>
-    ipcRenderer.invoke(DESKTOP_IPC.searchProjectFiles, projectIdOrWorkspaceId, query, limit, includeIgnored),
+  searchProjectFiles: (projectIdOrWorkspaceId, query, limit, includeIgnored, includeDirectories) =>
+    ipcRenderer.invoke(
+      DESKTOP_IPC.searchProjectFiles,
+      projectIdOrWorkspaceId,
+      query,
+      limit,
+      includeIgnored,
+      includeDirectories
+    ),
   searchWorkspaceText: (projectPath, options) =>
     ipcRenderer.invoke(DESKTOP_IPC.searchWorkspaceText, projectPath, options),
   replaceWorkspaceText: (projectPath, options, replacement, relPaths) =>
